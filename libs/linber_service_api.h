@@ -15,20 +15,20 @@
 
 int linber_device_file_desc = -1;
 
-int ioctl_register_service(int file_desc, linber_register_service_struct param){
+int ioctl_register_service(int file_desc, linber_service_struct param){
 	int ret;
-	printf("registering service: %s\n", param.service_uri);
-	ret = ioctl(file_desc, IOCTL_REGISTER_SERVICE, param);
+	printf("registering service: %s, %u\n", param.service_uri, param.service_uri_len);
+	ret = ioctl(file_desc, IOCTL_REGISTER_SERVICE, &param);
 	if(ret < 0){
 		printf("ioctl_register_service failerd:%d\n", ret);
 		return -1;
 	}
 }
 
-int ioctl_request_service(int file_desc, linber_request_service_struct param){
+int ioctl_request_service(int file_desc, linber_service_struct param){
 	int ret;
-	printf("requesting service: %s\n", param.service_uri);
-	ret = ioctl(file_desc, IOCTL_REQUEST_SERVICE, param);
+	printf("requesting service: %s, %u\n", param.service_uri, param.service_uri_len);
+	ret = ioctl(file_desc, IOCTL_REQUEST_SERVICE, &param);
 	if(ret < 0){
 		printf("ioctl_request_service failerd:%d\n", ret);
 		return -1;
@@ -61,10 +61,10 @@ int linber_register_service(char * service_uri, uint uri_len, uint exectime){
 		printf("Linber Register: uri size too large\n");
 		return LINBER_ERROR_URI;
 	}
-	linber_register_service_struct param;
+	linber_service_struct param;
 	param.service_uri = service_uri;
 	param.service_uri_len = uri_len;
-	param.service_exectime = exectime;
+	param.service_time = exectime;
 	ioctl_register_service(linber_device_file_desc, param);
 }
 
@@ -77,10 +77,10 @@ int linber_request_service(char * service_uri, uint uri_len, uint rel_deadline){
 		printf("Linber Request: uri size too large\n");
 		return LINBER_ERROR_URI;
 	}
-	linber_request_service_struct param;
+	linber_service_struct param;
 	param.service_uri = service_uri;
 	param.service_uri_len = uri_len;
-	param.request_rel_deadline = rel_deadline;
+	param.service_time = rel_deadline;
 	ioctl_request_service(linber_device_file_desc, param);
 }
 

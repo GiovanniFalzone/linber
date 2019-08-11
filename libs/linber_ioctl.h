@@ -12,16 +12,10 @@
 
 #define SERVICE_URI_MAX_LEN		50
 
-typedef struct linber_register_service_struct {
+typedef struct linber_service_struct {
 	char *service_uri;
-	uint service_uri_len;
-	uint service_exectime;
-} linber_register_service_struct;
-
-typedef struct linber_request_service_struct {
-	char *service_uri;
-	uint service_uri_len;
-	uint request_rel_deadline;
-} linber_request_service_struct;
+	unsigned int service_uri_len;
+	unsigned int service_time;
+} linber_service_struct;
 
 #endif

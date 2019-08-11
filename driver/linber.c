@@ -3,6 +3,7 @@
 #include <linux/kernel.h>	/* Needed for KERN_INFO */
 #include <linux/module.h>	/* Needed by all modules */
 #include <linux/fs.h>
+#include <linux/slab.h>
 #include <linux/uaccess.h>
 
 #include <linux/device.h>
@@ -33,20 +34,19 @@ static ssize_t	dev_write(struct file *f, const char *buf, size_t sz, loff_t *off
 
 static long		linber_ioctl(struct file *f, unsigned int cmd, unsigned long ioctl_param){ 
 	char service_uri[SERVICE_URI_MAX_LEN];
-	linber_register_service_struct reg_obj;
-	linber_request_service_struct req_obj;
+	linber_service_struct *obj = kmalloc(sizeof(linber_service_struct), GFP_KERNEL);
 
 	switch(cmd){
 		case IOCTL_REGISTER_SERVICE:
-			copy_from_user((void*)&reg_obj, (void *)ioctl_param, sizeof(linber_register_service_struct));
-			copy_from_user((char*)service_uri, (char*)reg_obj.service_uri, 4);
-			printk(KERN_INFO "IOCTL Registration received, param: %s\n", (char*)service_uri);
+			copy_from_user(obj, (void *)ioctl_param, sizeof(linber_service_struct));
+			copy_from_user((char*)service_uri, (char*)obj->service_uri, obj->service_uri_len);
+			printk(KERN_INFO "IOCTL Registration received, name:%s, len:%u, exec_time:%u\n", service_uri, obj->service_uri_len, obj->service_time);
 			break;
 
 		case IOCTL_REQUEST_SERVICE:
-			copy_from_user((void*)&req_obj, (void *)ioctl_param, sizeof(linber_request_service_struct));
-			copy_from_user((char*)service_uri, (char*)req_obj.service_uri, 4);
-			printk(KERN_INFO "IOCTL Request received, param: %s\n", (char*)service_uri);
+			copy_from_user(obj, (void *)ioctl_param, sizeof(linber_service_struct));
+			copy_from_user((char*)service_uri, (char*)obj->service_uri, obj->service_uri_len);
+			printk(KERN_INFO "IOCTL Request received, name:%s, len:%u, deadline:%u\n", service_uri, obj->service_uri_len, obj->service_time);
 			break;
 
 		default:

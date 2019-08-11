@@ -5,7 +5,7 @@
 
 #include "../libs/linber_service_api.h"
 
-#define SERVICE_NAME	"babba\0"
+#define SERVICE_NAME	"org.server.func.1\0"
 
 #define REL_DEADLINE		10
 #define SERVICE_EXECTIME	5
