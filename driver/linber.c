@@ -1,9 +1,11 @@
 /*
 */
-#include <linux/module.h>	/* Needed by all modules */
 #include <linux/kernel.h>	/* Needed for KERN_INFO */
-#include <linux/device.h>
+#include <linux/module.h>	/* Needed by all modules */
 #include <linux/fs.h>
+#include <linux/uaccess.h>
+
+#include <linux/device.h>
 #include <linux/ioctl.h>
 
 #include "../libs/linber_ioctl.h"
@@ -16,21 +18,35 @@ static int dev_major;
 static struct class*	dev_class	= NULL; ///< The device-driver class struct pointer
 static struct device* dev_device = NULL; ///< The device-driver device struct pointer
 
+static int		dev_open(struct inode *n, struct file *f) {
+	try_module_get(THIS_MODULE); return 0;
+}
+static int		dev_release(struct inode *n, struct file *f) {
+	module_put(THIS_MODULE); return 0;
+}
+static ssize_t	dev_read(struct file *f, char *buf, size_t sz, loff_t *off) {
+	return 0;
+}
+static ssize_t	dev_write(struct file *f, const char *buf, size_t sz, loff_t *off) {
+	return	0;
+}
 
+static long		linber_ioctl(struct file *f, unsigned int cmd, unsigned long ioctl_param){ 
+	char service_uri[SERVICE_URI_MAX_LEN];
+	linber_register_service_struct reg_obj;
+	linber_request_service_struct req_obj;
 
-static int		dev_open(struct inode *n, struct file *f) { try_module_get(THIS_MODULE); return 0; }
-static int		dev_release(struct inode *n, struct file *f) { module_put(THIS_MODULE); return 0; }
-static ssize_t	dev_read(struct file *f, char *buf, size_t sz, loff_t *off) { return 0; }
-static ssize_t	dev_write(struct file *f, const char *buf, size_t sz, loff_t *off) { return	0; }
-
-static long		linber_ioctl(struct file *f, unsigned int cmd, unsigned long arg){ 
 	switch(cmd){
 		case IOCTL_REGISTER_SERVICE:
-			printk(KERN_INFO "IOCTL Registration received\n");
+			copy_from_user((void*)&reg_obj, (void *)ioctl_param, sizeof(linber_register_service_struct));
+			copy_from_user((char*)service_uri, (char*)reg_obj.service_uri, 4);
+			printk(KERN_INFO "IOCTL Registration received, param: %s\n", (char*)service_uri);
 			break;
 
 		case IOCTL_REQUEST_SERVICE:
-			printk(KERN_INFO "IOCTL Request received\n");
+			copy_from_user((void*)&req_obj, (void *)ioctl_param, sizeof(linber_request_service_struct));
+			copy_from_user((char*)service_uri, (char*)req_obj.service_uri, 4);
+			printk(KERN_INFO "IOCTL Request received, param: %s\n", (char*)service_uri);
 			break;
 
 		default:

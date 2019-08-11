@@ -10,11 +10,15 @@ case ${cmd} in
 		sh -c 'cd test && make clean'
 		;; 
 	insmod)
-		sh -c 'sudo insmod driver/linber.ko'
+		sh -c 'sudo insmod driver/linber.ko && sudo chmod 755 /dev/linber'
 		;; 
 	rmmod)
 		sh -c 'sudo rmmod linber'
 		;; 
+
+	updatemod)
+		sh -c 'cd driver && make clean && make && sudo rmmod linber && sudo insmod linber.ko && sudo chmod 755 /dev/linber'
+		;;
 
 	runtest)
 		test/client
