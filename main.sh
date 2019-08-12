@@ -10,18 +10,19 @@ case ${cmd} in
 		sh -c 'cd test && make clean'
 		;; 
 	insmod)
-		sh -c 'sudo insmod driver/linber.ko && sudo chmod 755 /dev/linber'
+		sh -c 'sudo insmod driver/linber.ko'
 		;; 
 	rmmod)
 		sh -c 'sudo rmmod linber'
 		;; 
 
 	updatemod)
-		sh -c 'cd driver && make clean && make && sudo rmmod linber && sudo insmod linber.ko && sudo chmod 755 /dev/linber'
+		sh -c 'cd driver && make && sudo rmmod linber && sudo insmod linber.ko'
 		;;
 
 	runtest)
 		test/client
+		cat /var/log/syslog | grep 'linber::'
 		;;
 
    *)  
