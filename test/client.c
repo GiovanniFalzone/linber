@@ -11,7 +11,7 @@
 int main(){
 	printf("Running client test\n");
 	linber_init();
-	for(int i=0; i<32; i++){
+	for(int i=0; i<2; i++){
 		linber_request_service(SERVICE_NAME, sizeof(SERVICE_NAME), REL_DEADLINE);
 	}
 	linber_exit();

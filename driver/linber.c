@@ -39,9 +39,6 @@ static ssize_t	dev_write(struct file *f, const char *buf, size_t sz, loff_t *off
 	return	0;
 }
 
-/*
-*/
-//struct semaphore Workers;	// waiting for requests, count=MAX_CONCURRENT
 
 //------------------------------------------------------
 typedef struct RequestNode{
@@ -55,12 +52,13 @@ typedef struct ServiceNode{
 	int id;
 	char *uri;
 	struct list_head RequestsHead;
-	// semaphore, block workers waiting for requests
+	RequestNode **Serving_requests; // array serving requests, size max workers
+	struct semaphore Workers_sem;
+	struct mutex ser_mutex;
 }ServiceNode;
 
 static struct list_head ServicesHead;
 
-// list of requests, each of them with a mutex/lock blocking the single client
 // ------------------------------------------------------
 static int initialize_queue(struct list_head *head){
 	INIT_LIST_HEAD(head);
@@ -71,11 +69,11 @@ static void print_request_list(struct list_head *head){
 	struct list_head *p;
 	RequestNode *n;
 	if(list_empty(head)){
-		printk(KERN_INFO "linber:: Empty list\n");
+//		printk(KERN_INFO "linber:: Empty list\n");
 	} else {
 		list_for_each(p, head){
 			n = list_entry(p, RequestNode, list);
-			printk(KERN_INFO "linber:: list element:%d\n", n->id);
+//			printk(KERN_INFO "linber:: list element:%d\n", n->id);
 		}
 	}
 }
@@ -93,7 +91,7 @@ static RequestNode *Enqueue_Request(struct list_head *head, int id){
 static RequestNode *Dequeue_Request(struct list_head *head){
 	RequestNode *node = NULL;
 	if(list_empty(head)){
-		printk(KERN_INFO "linber:: Dequeue Request Empty list\n");
+//		printk(KERN_INFO "linber:: Dequeue Request Empty list\n");
 	} else {
 		node = list_first_entry(head, RequestNode , list);
 		printk(KERN_INFO "linber:: Dequeue Request dequeued:%d\n", node->id);
@@ -119,7 +117,7 @@ static void print_service_list(struct list_head *head){
 static int Enqueue_Service(struct list_head *head, ServiceNode *node){
 	list_add_tail(&node->list, head);
 	printk(KERN_INFO "linber:: Enqueue Service:%d\n", node->id);
-	print_service_list(head);
+//	print_service_list(head);
 	return 0;
 }
 
@@ -163,9 +161,8 @@ static int linber_create_service(char *uri){
 	initialize_queue(&node->RequestsHead);
 	node->id =next_service_id++;
 	node->uri = uri;
-	// initilize workers semaphore
-	//	sema_init(&Workers, 1);
-
+	mutex_init(&node->ser_mutex);
+	sema_init(&node->Workers_sem, 0);
 	Enqueue_Service(&ServicesHead, node);
 	return 0;
 }
@@ -191,7 +188,10 @@ static int linber_request_service(linber_service_struct *obj){
 	printk(KERN_INFO "linber:: IOCTL Request received, name:%s, exec_time:%u\n", obj->service_uri, obj->service_time);
 	ser_node = findService(obj->service_uri);
 	if(ser_node != NULL){
-		req_node = Enqueue_Request(&ser_node->RequestsHead, id++);
+		mutex_lock(&ser_node->ser_mutex);
+			req_node = Enqueue_Request(&ser_node->RequestsHead, id++);
+			up(&ser_node->Workers_sem);
+		mutex_unlock(&ser_node->ser_mutex);
 		down_interruptible(&req_node->Request_sem);
 	} else {
 		printk(KERN_INFO "linber:: Service:%s does not exists\n", obj->service_uri);
@@ -201,12 +201,19 @@ static int linber_request_service(linber_service_struct *obj){
 
 static int linber_Start_Job(linber_service_struct *obj){
 	RequestNode *req_node;
-	ServiceNode *node = findService(obj->service_uri);
-	if(node != NULL){
-		req_node = Dequeue_Request(&node->RequestsHead);
-		if(req_node != NULL){
-			printk(KERN_INFO "linber:: Serving Request %d, service: %s\n",req_node->id, obj->service_uri);
-			up(&req_node->Request_sem);
+	ServiceNode *ser_node = findService(obj->service_uri);
+	if(ser_node != NULL){
+		down_interruptible(&ser_node->Workers_sem);
+		mutex_lock(&ser_node->ser_mutex);
+			req_node = Dequeue_Request(&ser_node->RequestsHead);
+		mutex_unlock(&ser_node->ser_mutex);
+		if(req_node == NULL){
+			printk(KERN_INFO "linber:: No pending request for service: %s\n", obj->service_uri);
+			// abort job
+		} else {
+			printk(KERN_INFO "linber:: Serving Request %d, service: %s\n", req_node->id, obj->service_uri);
+			// exec job
+			up(&req_node->Request_sem);	// end job
 		}
 	} else {
 		printk(KERN_INFO "linber:: Service:%s does not exists\n", obj->service_uri);
@@ -214,10 +221,10 @@ static int linber_Start_Job(linber_service_struct *obj){
 	return 0;
 }
 
-/* called via ioctl when a worker finish to serve a request
-*/
 static int linber_End_Job(linber_service_struct *obj){
-	printk(KERN_INFO "linber:: End job %s\n", obj->service_uri);
+//	printk(KERN_INFO "linber:: End job %s\n", obj->service_uri);
+	// find request in serving_requests
+	// up(&req_node->Request_sem);	// end job
 	return 0;
 }
 

@@ -11,16 +11,16 @@
 #define LINBER_ERROR_DEVICE_FILE	-1
 #define LINBER_ERROR_URI			-2
 
-#define DEBUG_LINBER
+#define DEBUG
 
 int linber_device_file_desc = -1;
 
 int ioctl_register_service(int file_desc, linber_service_struct param){
 	int ret;
-	printf("registering service: %s, %u\n", param.service_uri, param.service_uri_len);
+	printf("registering service: %s\n", param.service_uri, param.service_uri_len);
 	ret = ioctl(file_desc, IOCTL_REGISTER_SERVICE, &param);
 	if(ret < 0){
-		printf("ioctl_register_service failerd:%d\n", ret);
+		printf("ioctl_register_service failed:%d\n", ret);
 		return -1;
 	}
 	return 0;
@@ -28,7 +28,7 @@ int ioctl_register_service(int file_desc, linber_service_struct param){
 
 int ioctl_request_service(int file_desc, linber_service_struct param){
 	int ret;
-	printf("requesting service: %s, %u\n", param.service_uri, param.service_uri_len);
+	printf("requesting service: %s\n", param.service_uri);
 	ret = ioctl(file_desc, IOCTL_REQUEST_SERVICE, &param);
 	if(ret < 0){
 		printf("ioctl_request_service failerd:%d\n", ret);
@@ -39,7 +39,6 @@ int ioctl_request_service(int file_desc, linber_service_struct param){
 
 int ioctl_start_job_service(int file_desc, linber_service_struct param){
 	int ret;
-	printf("start_job: %s, %u\n", param.service_uri, param.service_uri_len);
 	ret = ioctl(file_desc, IOCTL_START_JOB_SERVICE, &param);
 	if(ret < 0){
 		printf("ioctl_start_job_service failerd:%d\n", ret);
@@ -50,7 +49,6 @@ int ioctl_start_job_service(int file_desc, linber_service_struct param){
 
 int ioctl_end_job_service(int file_desc, linber_service_struct param){
 	int ret;
-	printf("end_job: %s, %u\n", param.service_uri, param.service_uri_len);
 	ret = ioctl(file_desc, IOCTL_END_JOB_SERVICE, &param);
 	if(ret < 0){
 		printf("ioctl_end_job_service failerd:%d\n", ret);

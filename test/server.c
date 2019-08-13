@@ -10,7 +10,7 @@
 #define SERVICE_NAME	"org.server.func.1\0"
 #define SERVICE_EXECTIME	5
 
-#define THREAD_JOB_EXEC_TIME	2
+#define THREAD_JOB_EXEC_TIME	1
 
 typedef struct{
 	pthread_t tid;
@@ -22,9 +22,11 @@ typedef struct{
 
 void *thread_job(void *args){
 	thread_info worker = *(thread_info*)args;
-	printf("started_thread id:%d, service:%s", worker.id, worker.service_uri);
+	printf("started_thread id:%d, service:%s\n", worker.id, worker.service_uri);
+	int job_num = 1;
 	while(1){
 		linber_start_job_service(worker.service_uri, worker.uri_len);
+		printf("thread id:%d job#:%d, serving request for service:%s\n", worker.id, job_num++, worker.service_uri);
 		sleep(THREAD_JOB_EXEC_TIME);
 		linber_end_job_service(worker.service_uri, worker.uri_len);
 	}
@@ -41,6 +43,7 @@ int main() {
 	worker.service_uri = malloc(worker.uri_len);
 	strcpy(worker.service_uri, SERVICE_NAME);
 
+	printf("starting thread pool\n");
 	int terr = pthread_create(&worker.tid, NULL, thread_job, (void*)&worker);
 
 	if (terr != 0){
