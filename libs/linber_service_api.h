@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <linux/ioctl.h>
+#include <sys/ioctl.h>
 #include "linber_ioctl.h"
 
 #define LINBER_ERROR_DEVICE_FILE	-1

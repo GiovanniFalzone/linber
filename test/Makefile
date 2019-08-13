@@ -1,5 +1,6 @@
 CC = gcc
 CFLAGS = -Wall -pedantic -I.
+LDLIBS = -pthread
 
 TARGET = client server
 
@@ -7,7 +8,7 @@ TARGET = client server
 all: $(TARGET)
 
 %.o: %.c
-	$(CC) -c -o $@ $< $(CFLAGS)
+	$(CC) -c -o $@ $< $(CFLAGS) $(LDLIBS)
 
 .PHONY:
 clean:
