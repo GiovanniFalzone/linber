@@ -44,9 +44,9 @@ int main() {
 	for(int i=0; i<MAX_WORKERS; i++){
 		worker[i].uri_len = sizeof(SERVICE_NAME);
 		worker[i].service_uri = malloc(worker[i].uri_len);
-		worker[i].id = 0;
+		worker[i].id = i;
 		strcpy(worker[i].service_uri, SERVICE_NAME);
-		int terr = pthread_create(&worker[i].tid, NULL, thread_job, (void*)&worker);
+		int terr = pthread_create(&worker[i].tid, NULL, thread_job, (void*)&worker[i]);
 		if (terr != 0){
 			printf("Thread creation error: %d\n", terr);
 			exit(1);
