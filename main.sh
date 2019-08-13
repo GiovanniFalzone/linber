@@ -2,8 +2,8 @@
 cmd="${1}" 
 case ${cmd} in 
 	makeall)
-		sh -c 'cd driver && make'
-		sh -c 'cd test && make'
+		sh -c 'cd driver && make clean && make all'
+		sh -c 'cd test && make clean && make all'
 		;;  
 	clean)
 		sh -c 'cd driver && make clean'

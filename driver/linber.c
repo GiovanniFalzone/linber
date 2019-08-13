@@ -47,12 +47,21 @@ typedef struct RequestNode{
 	struct semaphore Request_sem;
 }RequestNode;
 
+struct ServingRequests{
+	RequestNode **Serving_arr; // array serving requests, size max workers
+	struct mutex load_mutex;
+	int count;
+	int load;
+};
+
 typedef struct ServiceNode{
 	struct list_head list;
 	int id;
 	char *uri;
+	int max_workers;
+	int exec_time;
 	struct list_head RequestsHead;
-	RequestNode **Serving_requests; // array serving requests, size max workers
+	struct ServingRequests Serving_requests;
 	struct semaphore Workers_sem;
 	struct mutex ser_mutex;
 }ServiceNode;
@@ -154,13 +163,20 @@ static ServiceNode* findService(char *uri){
 
 //------------------------------------------------------
 
-static int linber_create_service(char *uri){
+static int linber_create_service(linber_service_struct *obj){
 	static int next_service_id = 0;
 	ServiceNode *node;
 	node = kmalloc(sizeof(*node) ,GFP_KERNEL);
 	initialize_queue(&node->RequestsHead);
 	node->id =next_service_id++;
-	node->uri = uri;
+	node->uri = obj->service_uri;
+	node->exec_time = obj->service_params.registration.exec_time;
+	node->max_workers = obj->service_params.registration.max_workers;
+	node->Serving_requests.Serving_arr = kmalloc(node->max_workers*sizeof(RequestNode *), GFP_KERNEL);
+	node->Serving_requests.count = 0;
+	node->Serving_requests.load = 0;
+	mutex_init(&node->Serving_requests.load_mutex);
+
 	mutex_init(&node->ser_mutex);
 	sema_init(&node->Workers_sem, 0);
 	Enqueue_Service(&ServicesHead, node);
@@ -170,10 +186,10 @@ static int linber_create_service(char *uri){
 //------------------------------------------------------
 static int linber_register_service(linber_service_struct *obj){
 	ServiceNode *node;
-	printk(KERN_INFO "linber:: IOCTL Registration received, name:%s, exec_time:%u\n", obj->service_uri, obj->service_time);
+	printk(KERN_INFO "linber:: IOCTL Registration received, name:%s\n", obj->service_uri);
 	node = findService(obj->service_uri);
 	if(node == NULL){
-		linber_create_service(obj->service_uri);
+		linber_create_service(obj);
 	} else {
 		printk(KERN_INFO "linber:: Service:%s already exists\n", obj->service_uri);
 	}
@@ -185,7 +201,7 @@ static int linber_request_service(linber_service_struct *obj){
 	static int id = 0;
 	RequestNode *req_node;
 	ServiceNode *ser_node;
-	printk(KERN_INFO "linber:: IOCTL Request received, name:%s, exec_time:%u\n", obj->service_uri, obj->service_time);
+	printk(KERN_INFO "linber:: IOCTL Request received, name:%s\n", obj->service_uri);
 	ser_node = findService(obj->service_uri);
 	if(ser_node != NULL){
 		mutex_lock(&ser_node->ser_mutex);
@@ -193,6 +209,7 @@ static int linber_request_service(linber_service_struct *obj){
 			up(&ser_node->Workers_sem);
 		mutex_unlock(&ser_node->ser_mutex);
 		down_interruptible(&req_node->Request_sem);
+		// request completed or aborted
 	} else {
 		printk(KERN_INFO "linber:: Service:%s does not exists\n", obj->service_uri);
 	}
@@ -212,8 +229,14 @@ static int linber_Start_Job(linber_service_struct *obj){
 			// abort job
 		} else {
 			printk(KERN_INFO "linber:: Serving Request %d, service: %s\n", req_node->id, obj->service_uri);
-			// exec job
-			up(&req_node->Request_sem);	// end job
+			ser_node->Serving_requests.Serving_arr[obj->service_params.start_job.worker_id] = req_node;
+			mutex_lock(&ser_node->Serving_requests.load_mutex);
+				ser_node->Serving_requests.load += ser_node->exec_time;
+				ser_node->Serving_requests.count++;
+			mutex_unlock(&ser_node->Serving_requests.load_mutex);
+
+			// pass parameters to worker and exec job
+
 		}
 	} else {
 		printk(KERN_INFO "linber:: Service:%s does not exists\n", obj->service_uri);
@@ -221,10 +244,24 @@ static int linber_Start_Job(linber_service_struct *obj){
 	return 0;
 }
 
-static int linber_End_Job(linber_service_struct *obj){
-//	printk(KERN_INFO "linber:: End job %s\n", obj->service_uri);
 	// find request in serving_requests
-	// up(&req_node->Request_sem);	// end job
+	// copy ret to client userspace
+	// wake up client
+	// destroy request structure
+static int linber_End_Job(linber_service_struct *obj){
+	RequestNode *req_node;
+	ServiceNode *ser_node = findService(obj->service_uri);
+	printk(KERN_INFO "linber:: End job %s\n", obj->service_uri);
+	if(ser_node != NULL){
+		mutex_lock(&ser_node->Serving_requests.load_mutex);
+			ser_node->Serving_requests.load -= ser_node->exec_time;
+			ser_node->Serving_requests.count--;
+		mutex_unlock(&ser_node->Serving_requests.load_mutex);
+		req_node = ser_node->Serving_requests.Serving_arr[obj->service_params.end_job.worker_id];
+		// copy service return in the request ret
+		up(&req_node->Request_sem);	// end job
+		kfree(req_node);
+	}
 	return 0;
 }
 
@@ -243,6 +280,7 @@ static long		linber_ioctl(struct file *f, unsigned int cmd, unsigned long ioctl_
 			break;
 
 		case IOCTL_REQUEST_SERVICE:
+			//copy from user params
 			linber_request_service(obj);
 			break;
 
@@ -251,6 +289,7 @@ static long		linber_ioctl(struct file *f, unsigned int cmd, unsigned long ioctl_
 			break;
 
 		case IOCTL_END_JOB_SERVICE:
+			// copy from user ret
 			linber_End_Job(obj);
 			break;
 
