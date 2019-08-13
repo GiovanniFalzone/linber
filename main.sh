@@ -21,7 +21,11 @@ case ${cmd} in
 		;;
 
 	runtest)
+		test/server
 		test/client
+		;;
+
+	log)
 		cat /var/log/syslog | grep 'linber::'
 		;;
 

@@ -1,5 +1,14 @@
-client.o : client.c	
-	gcc client.c -o client
+CC = gcc
+CFLAGS = -Wall -pedantic -I.
 
-clean : 
-	rm -f client, *.o, *.out
+TARGET = client server
+
+.PHONY:
+all: $(TARGET)
+
+%.o: %.c
+	$(CC) -c -o $@ $< $(CFLAGS)
+
+.PHONY:
+clean:
+	rm -f *.o $(TARGET)
