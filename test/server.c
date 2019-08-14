@@ -62,7 +62,7 @@ int main(int argc,char* argv[]){
 	printf("Running Service Server %s with %d workers, job exec time:%d\n", SERVICE_NAME, max_workers, job_exec_time);
 
 	linber_init();
-	linber_register_service(SERVICE_NAME, sizeof(SERVICE_NAME), SERVICE_EXECTIME, max_workers);
+	linber_register_service(SERVICE_NAME, sizeof(SERVICE_NAME), job_exec_time, max_workers);
 
 	printf("starting thread pool\n");
 	thread_info worker[max_workers];

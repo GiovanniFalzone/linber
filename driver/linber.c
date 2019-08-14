@@ -151,17 +151,17 @@ static int linber_create_service(linber_service_struct *obj){
 	node->Serving_requests.count = 0;
 	node->Serving_requests.load = 0;
 	mutex_init(&node->Serving_requests.load_mutex);
-
 	mutex_init(&node->ser_mutex);
 	sema_init(&node->Workers_sem, 0);
 	Enqueue_Service(&ServicesHead, node);
+	printk(KERN_INFO "linber:: New Service, %s, workers:%d,  exec time:%d\n", node->uri, node->max_workers, node->exec_time);
 	return 0;
 }
 
 //------------------------------------------------------
 static int linber_register_service(linber_service_struct *obj){
 	ServiceNode *node;
-	printk(KERN_INFO "linber:: IOCTL Registration received, name:%s\n", obj->service_uri);
+	printk(KERN_INFO "linber:: IOCTL Registration received\n");
 	node = findService(obj->service_uri);
 	if(node == NULL){
 		linber_create_service(obj);
@@ -324,13 +324,14 @@ int init_module(void) {
 }
 
 void destroy_request(RequestNode *node_request){
-	up(&node_request->Request_sem);	// useless, can't rmmod if someone is using it
+	up(&node_request->Request_sem);
 	kfree(node_request);
 }
 
 void destroy_service(ServiceNode *node_service){
+	int i;
 	RequestNode *node_request, *next;
-	mutex_lock(&node_service->ser_mutex);	// useless, can't rmmod if someone is using it
+	mutex_lock(&node_service->ser_mutex);
 	list_for_each_entry_safe(node_request, next, &node_service->RequestsHead, list){
 		list_del(&node_request->list);
 		destroy_request(node_request);
@@ -339,8 +340,8 @@ void destroy_service(ServiceNode *node_service){
 		list_del(&node_request->list);
 		destroy_request(node_request);
 	}
-	kfree(node_service->uri);
 	kfree(node_service->Serving_requests.Serving_arr);
+	kfree(node_service->uri);
 	mutex_unlock(&node_service->ser_mutex);
 	kfree(node_service);
 }
