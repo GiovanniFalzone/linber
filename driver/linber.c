@@ -75,14 +75,12 @@ static int initialize_queue(struct list_head *head){
 }
 
 static void print_request_list(struct list_head *head){
-	struct list_head *p;
-	RequestNode *n;
+	RequestNode *node;
 	if(list_empty(head)){
 //		printk(KERN_INFO "linber:: Empty list\n");
 	} else {
-		list_for_each(p, head){
-			n = list_entry(p, RequestNode, list);
-//			printk(KERN_INFO "linber:: list element:%d\n", n->id);
+		list_for_each_entry(node, head, list){
+//			printk(KERN_INFO "linber:: list element:%d\n", node->id);
 		}
 	}
 }
@@ -111,14 +109,12 @@ static RequestNode *Dequeue_Request(struct list_head *head){
 //------------------------------------------------------
 
 static void print_service_list(struct list_head *head){
-	struct list_head *p;
-	ServiceNode *n;
+	ServiceNode *node;
 	if(list_empty(head)){
 		printk(KERN_INFO "linber:: Empty list\n");
 	} else {
-		list_for_each(p, head){
-			n = list_entry(p, ServiceNode, list);
-			printk(KERN_INFO "linber:: list element:%d\n", n->id);
+		list_for_each_entry(node, head, list){
+			printk(KERN_INFO "linber:: list element:%d\n", node->id);
 		}
 	}
 }
@@ -130,32 +126,11 @@ static int Enqueue_Service(struct list_head *head, ServiceNode *node){
 	return 0;
 }
 
-static int Dequeue_Service(struct list_head *head, ServiceNode *node){
-	if(list_empty(head)){
-		printk(KERN_INFO "linber:: Dequeue Service Empty list\n");
-		return EMPTY_LIST;
-	}
-
-	node = list_first_entry(head, ServiceNode , list);
-	printk(KERN_INFO "linber:: Dequeue Service dequeued:%d\n", node->id);
-
-	kfree(node->uri);
-	list_del(&node->list);
-
-	print_service_list(head);
-
-	return 0;
-}
-
 static ServiceNode* findService(char *uri){
-	struct list_head *p;
-	ServiceNode *n;
-	if(!list_empty(&ServicesHead)){
-		list_for_each(p, &ServicesHead){
-			n = list_entry(p, ServiceNode, list);
-			if(strcmp(n->uri, uri) == 0){
-				return n;
-			}
+	ServiceNode *node;
+	list_for_each_entry(node, &ServicesHead, list){
+		if(strcmp(node->uri, uri) == 0){
+			return node;
 		}
 	}
 	return NULL;
@@ -348,7 +323,40 @@ int init_module(void) {
 	return 0;
 }
 
+void destroy_request(RequestNode *node_request){
+	up(&node_request->Request_sem);	// useless, can't rmmod if someone is using it
+	kfree(node_request);
+}
+
+void destroy_service(ServiceNode *node_service){
+	RequestNode *node_request, *next;
+	mutex_lock(&node_service->ser_mutex);	// useless, can't rmmod if someone is using it
+	list_for_each_entry_safe(node_request, next, &node_service->RequestsHead, list){
+		list_del(&node_request->list);
+		destroy_request(node_request);
+	}
+	list_for_each_entry_safe_reverse(node_request, next, &node_service->RequestsHead, list){
+		list_del(&node_request->list);
+		destroy_request(node_request);
+	}
+	kfree(node_service->uri);
+	kfree(node_service->Serving_requests.Serving_arr);
+	mutex_unlock(&node_service->ser_mutex);
+	kfree(node_service);
+}
+
 void cleanup_module(void) {
+	ServiceNode *node_service, *next;
+	list_for_each_entry_safe(node_service, next, &ServicesHead, list){
+		list_del(&node_service->list);
+		destroy_service(node_service);
+
+	}
+	list_for_each_entry_safe_reverse(node_service, next, &ServicesHead, list){
+		list_del(&node_service->list);
+		destroy_service(node_service);
+	}
+
 	printk(KERN_INFO "linber:: Destroying device %s\n", CLA_NAME);
 	device_destroy(dev_class, MKDEV(dev_major, 0));
 	printk(KERN_INFO "linber:: Unregistering device class %s\n", CLA_NAME);
