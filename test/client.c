@@ -8,8 +8,7 @@
 
 #define SERVICE_NAME	"org.server.func.1\0"
 #define REL_DEADLINE		10
-
-#define CONCURRENT_REQUEST	10
+#define DEFAULT_CONCURRENT_REQUESTS	10
 
 typedef struct{
 	pthread_t tid;
@@ -26,12 +25,20 @@ void *thread_job(void *args){
 }
 
 
-int main(){
-	printf("Running client test\n");
+int main(int argc,char* argv[]){
+	int concurrent_requests = DEFAULT_CONCURRENT_REQUESTS;
+	if(argc == 2){
+		int n = atoi(argv[1]);
+		if(n > 0){
+			concurrent_requests = n;
+		}
+	}
+
+	printf("Running client test with %d concurrent requests on service %s\n", concurrent_requests, SERVICE_NAME);
 	linber_init();
 
-	thread_info worker[CONCURRENT_REQUEST];
-	for(int i=0; i<CONCURRENT_REQUEST; i++){
+	thread_info worker[concurrent_requests];
+	for(int i=0; i<concurrent_requests; i++){
 		worker[i].uri_len = sizeof(SERVICE_NAME);
 		worker[i].service_uri = malloc(worker[i].uri_len);
 		worker[i].id = i;
@@ -43,7 +50,7 @@ int main(){
 		}
 	}
 
-	for(int i=0; i<CONCURRENT_REQUEST; i++){
+	for(int i=0; i<concurrent_requests; i++){
 		pthread_join(worker[i].tid, NULL);
 	}
 

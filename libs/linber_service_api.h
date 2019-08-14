@@ -28,7 +28,7 @@ int ioctl_register_service(int file_desc, linber_service_struct param){
 
 int ioctl_request_service(int file_desc, linber_service_struct param){
 	int ret;
-	printf("requesting service: %s\n", param.service_uri);
+//	printf("requesting service: %s\n", param.service_uri);
 	ret = ioctl(file_desc, IOCTL_REQUEST_SERVICE, &param);
 	if(ret < 0){
 		printf("ioctl_request_service failerd:%d\n", ret);

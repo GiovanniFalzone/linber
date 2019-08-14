@@ -210,6 +210,7 @@ static int linber_request_service(linber_service_struct *obj){
 		mutex_unlock(&ser_node->ser_mutex);
 		down_interruptible(&req_node->Request_sem);
 		// request completed or aborted
+		kfree(req_node);
 	} else {
 		printk(KERN_INFO "linber:: Service:%s does not exists\n", obj->service_uri);
 	}
@@ -236,7 +237,6 @@ static int linber_Start_Job(linber_service_struct *obj){
 			mutex_unlock(&ser_node->Serving_requests.load_mutex);
 
 			// pass parameters to worker and exec job
-
 		}
 	} else {
 		printk(KERN_INFO "linber:: Service:%s does not exists\n", obj->service_uri);
@@ -260,7 +260,6 @@ static int linber_End_Job(linber_service_struct *obj){
 		req_node = ser_node->Serving_requests.Serving_arr[obj->service_params.end_job.worker_id];
 		// copy service return in the request ret
 		up(&req_node->Request_sem);	// end job
-		kfree(req_node);
 	}
 	return 0;
 }
