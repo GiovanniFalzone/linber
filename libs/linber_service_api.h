@@ -26,6 +26,17 @@ int ioctl_register_service(int file_desc, linber_service_struct param){
 	return 0;
 }
 
+int ioctl_register_service_worker(int file_desc, linber_service_struct param){
+	int ret;
+	printf("registering worker\n", param.service_uri);
+	ret = ioctl(file_desc, IOCTL_REGISTER_SERVICE_WORKER, &param);
+	if(ret < 0){
+		printf("ioctl_register_service_worker failed:%d\n", ret);
+		return -1;
+	}
+	return 0;
+}
+
 int ioctl_request_service(int file_desc, linber_service_struct param){
 	int ret;
 //	printf("requesting service: %s\n", param.service_uri);
@@ -89,8 +100,23 @@ int linber_register_service(char * service_uri, unsigned int uri_len, unsigned i
 	param.service_uri_len = uri_len;
 	param.service_params.registration.exec_time = exec_time;
 	param.service_params.registration.max_workers = max_workers;
-	ioctl_register_service(linber_device_file_desc, param);
-	return 0;
+	return ioctl_register_service(linber_device_file_desc, param);
+}
+
+int linber_register_service_worker(char * service_uri, unsigned int uri_len, unsigned int * worker_id){
+	if(linber_device_file_desc < 0){
+		printf("Linber Register: device file error\n");
+		return LINBER_ERROR_DEVICE_FILE;
+	}
+	if(uri_len > SERVICE_URI_MAX_LEN){
+		printf("Linber Register: uri size too large\n");
+		return LINBER_ERROR_URI;
+	}
+	linber_service_struct param;
+	param.service_uri = service_uri;
+	param.service_uri_len = uri_len;
+	param.service_params.register_worker.ret_worker_id = worker_id;
+	return ioctl_register_service_worker(linber_device_file_desc, param);
 }
 
 int linber_request_service(char * service_uri, unsigned int uri_len, unsigned int rel_deadline){
@@ -108,8 +134,7 @@ int linber_request_service(char * service_uri, unsigned int uri_len, unsigned in
 	param.service_params.request.params;
 	param.service_params.request.params_len;
 	param.service_params.request.rel_deadline = rel_deadline;
-	ioctl_request_service(linber_device_file_desc, param);
-	return 0;
+	return ioctl_request_service(linber_device_file_desc, param);
 }
 
 int linber_start_job_service(char * service_uri, unsigned int uri_len, unsigned int worker_id){
@@ -125,8 +150,7 @@ int linber_start_job_service(char * service_uri, unsigned int uri_len, unsigned 
 	param.service_uri = service_uri;
 	param.service_uri_len = uri_len;
 	param.service_params.start_job.worker_id = worker_id;
-	ioctl_start_job_service(linber_device_file_desc, param);
-	return 0;
+	return ioctl_start_job_service(linber_device_file_desc, param);
 }
 
 int linber_end_job_service(char * service_uri, unsigned int uri_len, unsigned int worker_id){
@@ -144,8 +168,7 @@ int linber_end_job_service(char * service_uri, unsigned int uri_len, unsigned in
 	param.service_params.end_job.worker_id = worker_id;
 	param.service_params.end_job.ret;
 	param.service_params.end_job.ret_len;
-	ioctl_end_job_service(linber_device_file_desc, param);
-	return 0;
+	return ioctl_end_job_service(linber_device_file_desc, param);
 }
 
 

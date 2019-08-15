@@ -11,9 +11,10 @@
 #define SERVICE_NAME	"org.server.func.1\0"
 #define SERVICE_EXECTIME	5
 
-#define DEFAULT_JOB_EXEC_TIME	100	//ms
+#define DEFAULT_JOB_EXEC_TIME	1	//ms
 
-#define DEFAULT_MAX_WORKERS		8
+#define DEFAULT_MAX_CONCURRENT_WORKERS		4
+#define DAFAULT_SPARE_WORKER				4
 
 typedef struct{
 	pthread_t tid;
@@ -29,7 +30,7 @@ void *thread_job(void *args){
 	printf("started_thread id:%d, service:%s\n", worker.id, worker.service_uri);
 	int job_num = 1;
 	while(1){
-		linber_start_job_service(worker.service_uri, worker.uri_len,worker.id);
+		linber_start_job_service(worker.service_uri, worker.uri_len, worker.id);
 		printf("thread id:%d job#:%d, serving request for service:%s\n", worker.id, job_num++, worker.service_uri);
 		struct timeval start, end;
 		gettimeofday(&start, NULL);
@@ -43,12 +44,12 @@ void *thread_job(void *args){
 }
 
 int main(int argc,char* argv[]){
-	int max_workers = DEFAULT_MAX_WORKERS;
+	int max_concurrent_workers = DEFAULT_MAX_CONCURRENT_WORKERS;
 	int job_exec_time = DEFAULT_JOB_EXEC_TIME;
 	if(argc >= 2){
 		int n = atoi(argv[1]);
 		if(n > 0){
-			max_workers = n;
+			max_concurrent_workers = n;
 		}
 	}
 
@@ -59,17 +60,20 @@ int main(int argc,char* argv[]){
 		}
 	}
 
-	printf("Running Service Server %s with %d workers, job exec time:%d\n", SERVICE_NAME, max_workers, job_exec_time);
+	printf("Running Service Server %s with %d workers, job exec time:%d\n", SERVICE_NAME, max_concurrent_workers, job_exec_time);
 
 	linber_init();
-	linber_register_service(SERVICE_NAME, sizeof(SERVICE_NAME), job_exec_time, max_workers);
+	linber_register_service(SERVICE_NAME, sizeof(SERVICE_NAME), job_exec_time, max_concurrent_workers);
 
 	printf("starting thread pool\n");
-	thread_info worker[max_workers];
-	for(int i=0; i<max_workers; i++){
+	int workers_num = max_concurrent_workers * DAFAULT_SPARE_WORKER;
+	thread_info worker[workers_num];
+	for(int i=0; i<workers_num; i++){
 		worker[i].uri_len = sizeof(SERVICE_NAME);
 		worker[i].service_uri = malloc(worker[i].uri_len);
-		worker[i].id = i;
+		unsigned int worker_id;
+		linber_register_service_worker(SERVICE_NAME, sizeof(SERVICE_NAME), &worker_id);
+		worker[i].id = worker_id;
 		worker[i].exec_time = job_exec_time;
 		strcpy(worker[i].service_uri, SERVICE_NAME);
 		int terr = pthread_create(&worker[i].tid, NULL, thread_job, (void*)&worker[i]);
@@ -79,7 +83,7 @@ int main(int argc,char* argv[]){
 		}
 	}
 
-	for(int i=0; i<max_workers; i++){
+	for(int i=0; i<workers_num; i++){
 		pthread_join(worker[i].tid, NULL);
 	}
 
