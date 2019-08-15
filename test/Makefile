@@ -2,7 +2,7 @@ CC = gcc
 CFLAGS = -Wall -pedantic -I.
 LDLIBS = -pthread
 
-TARGET = client server
+TARGET = client server system_monitor
 
 .PHONY:
 all: $(TARGET)

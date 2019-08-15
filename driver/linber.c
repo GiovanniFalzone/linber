@@ -9,6 +9,7 @@
 #include <linux/semaphore.h>
 #include <linux/device.h>
 #include <linux/ioctl.h>
+#include <linux/random.h>
 
 #include "../libs/linber_ioctl.h"
 
@@ -62,7 +63,7 @@ struct ServingRequests{
 
 typedef struct ServiceNode{
 	struct list_head list;
-	int id;
+	unsigned long id;
 	char *uri;
 	int max_workers;
 	int next_worker_id;
@@ -75,22 +76,17 @@ typedef struct ServiceNode{
 }ServiceNode;
 
 static struct list_head ServicesHead;
+unsigned int system_services_count;
+unsigned int system_requests_count;
+unsigned int system_serving_load;
+unsigned int system_serving_requests_count;
+unsigned int system_max_concurrent_workers;
+struct mutex System_mutex;
 
 // ------------------------------------------------------
 static int initialize_queue(struct list_head *head){
 	INIT_LIST_HEAD(head);
 	return 0;
-}
-
-static void print_request_list(struct list_head *head){
-	RequestNode *node;
-	if(list_empty(head)){
-//		printk(KERN_INFO "linber:: Empty list\n");
-	} else {
-		list_for_each_entry(node, head, list){
-//			printk(KERN_INFO "linber:: list element:%d\n", node->id);
-		}
-	}
 }
 
 static RequestNode *Enqueue_Request(struct list_head *head, int id){
@@ -116,21 +112,9 @@ static RequestNode *Dequeue_Request(struct list_head *head){
 }
 //------------------------------------------------------
 
-static void print_service_list(struct list_head *head){
-	ServiceNode *node;
-	if(list_empty(head)){
-		printk(KERN_INFO "linber:: Empty list\n");
-	} else {
-		list_for_each_entry(node, head, list){
-			printk(KERN_INFO "linber:: list element:%d\n", node->id);
-		}
-	}
-}
-
 static int Enqueue_Service(struct list_head *head, ServiceNode *node){
 	list_add_tail(&node->list, head);
-	printk(KERN_INFO "linber:: Enqueue Service:%d\n", node->id);
-//	print_service_list(head);
+	printk(KERN_INFO "linber:: Enqueue Service:%lu\n", node->id);
 	return 0;
 }
 
@@ -146,13 +130,12 @@ static ServiceNode* findService(char *uri){
 
 //------------------------------------------------------
 
-static int linber_create_service(linber_service_struct *obj){
+static ServiceNode * linber_create_service(linber_service_struct *obj){
 	int i = 0;
-	static int next_service_id = 0;
-	ServiceNode *node;
+	ServiceNode *node = NULL;
 	node = kmalloc(sizeof(*node) ,GFP_KERNEL);
 	initialize_queue(&node->RequestsHead);
-	node->id =next_service_id++;
+	get_random_bytes(&node->id, sizeof(node->id));
 	node->uri = obj->service_uri;
 	node->exec_time = obj->service_params.registration.exec_time;
 	node->max_workers = obj->service_params.registration.max_workers;
@@ -168,8 +151,12 @@ static int linber_create_service(linber_service_struct *obj){
 	mutex_init(&node->ser_mutex);
 	sema_init(&node->Workers_sem, 0);
 	Enqueue_Service(&ServicesHead, node);
-	printk(KERN_INFO "linber:: New Service, %s, workers:%d,  exec time:%d\n", node->uri, node->max_workers, node->exec_time);
-	return 0;
+	mutex_lock(&System_mutex);
+		system_services_count++;
+		system_max_concurrent_workers += node->max_workers;
+	mutex_unlock(&System_mutex);
+	printk(KERN_INFO "linber:: New Service id:%lu %s, workers:%d,  exec time:%d\n", node->id, node->uri, node->max_workers, node->exec_time);
+	return node;
 }
 
 //------------------------------------------------------
@@ -178,7 +165,8 @@ static int linber_register_service(linber_service_struct *obj){
 	printk(KERN_INFO "linber:: IOCTL Registration received\n");
 	node = findService(obj->service_uri);
 	if(node == NULL){
-		linber_create_service(obj);
+		node = linber_create_service(obj);
+		copy_to_user(obj->service_params.registration.ret_service_id, &node->id, sizeof(node->id));
 	} else {
 		printk(KERN_INFO "linber:: Service:%s already exists\n", obj->service_uri);
 	}
@@ -197,6 +185,9 @@ static int linber_request_service(linber_service_struct *obj){
 			ser_node->num_requests++;
 			up(&ser_node->Workers_sem);
 		mutex_unlock(&ser_node->ser_mutex);
+		mutex_lock(&System_mutex);
+			system_requests_count++;
+		mutex_unlock(&System_mutex);
 		down_interruptible(&req_node->Request_sem);
 		// request completed or aborted
 		kfree(req_node);
@@ -220,9 +211,9 @@ static int linber_register_service_worker(linber_service_struct *obj){
 	return 0;
 }
 
-static int linber_service_Worker_check_id(ServiceNode *ser_node, int worker_id){
-	if((worker_id >= 0 && worker_id <ser_node->max_workers)){
-			return 1;
+static int linber_service_Worker_check_id(ServiceNode *ser_node, unsigned long service_id, int worker_id){
+	if((ser_node->id == service_id) && (worker_id >= 0 && worker_id <ser_node->max_workers)){
+		return 1;
 	}
 	return 0;
 }
@@ -232,11 +223,13 @@ static int linber_Start_Job(linber_service_struct *obj){
 	RequestNode *req_node;
 	ServiceNode *ser_node = findService(obj->service_uri);
 	int worker_id;
+	unsigned long service_id;
 	if(ser_node != NULL){
 		// check arguments
 		worker_id = obj->service_params.start_job.worker_id;
-		if(!linber_service_Worker_check_id(ser_node, worker_id)){
-			printk(KERN_INFO "linber:: Wrong worker id %d for service: %s\n", worker_id, obj->service_uri);
+		service_id = obj->service_params.start_job.service_id;
+		if(!linber_service_Worker_check_id(ser_node, service_id, worker_id)){
+			printk(KERN_INFO "linber:: Wrong service id %lu or worker id %d for service: %s\n", service_id, worker_id, obj->service_uri);
 			return -1;
 		}
 
@@ -261,6 +254,12 @@ static int linber_Start_Job(linber_service_struct *obj){
 					ser_node->Serving_requests.count++;
 				mutex_unlock(&ser_node->Serving_requests.load_mutex);
 
+				mutex_lock(&System_mutex);
+					system_requests_count--;
+					system_serving_requests_count++;
+					system_serving_load += ser_node->exec_time;
+				mutex_unlock(&System_mutex);
+
 				// pass parameters to worker and exec job
 			}
 	} else {
@@ -277,17 +276,23 @@ static int linber_End_Job(linber_service_struct *obj){
 	RequestNode *req_node;
 	ServiceNode *ser_node = findService(obj->service_uri);
 	int worker_id;
+	unsigned long service_id;
 	printk(KERN_INFO "linber:: End job %s\n", obj->service_uri);
 	if(ser_node != NULL){
 		worker_id = obj->service_params.end_job.worker_id;
-		if(!linber_service_Worker_check_id(ser_node, worker_id)){
-			printk(KERN_INFO "linber:: Wrong worker id %d for service: %s\n", worker_id, obj->service_uri);
+		service_id = obj->service_params.end_job.service_id;
+		if(!linber_service_Worker_check_id(ser_node, service_id, worker_id)){
+			printk(KERN_INFO "linber:: Wrong service id %lu or worker id %d for service: %s\n", service_id,  worker_id, obj->service_uri);
 			return -1;
 		} else {
 			mutex_lock(&ser_node->Serving_requests.load_mutex);
 				ser_node->Serving_requests.load -= ser_node->exec_time;
 				ser_node->Serving_requests.count--;
 			mutex_unlock(&ser_node->Serving_requests.load_mutex);
+			mutex_lock(&System_mutex);
+				system_serving_requests_count--;
+				system_serving_load -= ser_node->exec_time;
+			mutex_unlock(&System_mutex);
 			req_node = ser_node->Serving_requests.Serving_slots_arr[worker_id].request;
 			if(req_node != NULL){
 				printk(KERN_INFO "linber:: End Serving Request %d %s\n", req_node->id, obj->service_uri);
@@ -296,23 +301,39 @@ static int linber_End_Job(linber_service_struct *obj){
 				mutex_unlock(&ser_node->Serving_requests.Serving_slots_arr[worker_id].slot_mutex);	// release slot
 				// copy service return in the request ret
 			} else {
-				printk(KERN_INFO "linber:: End job Spourious job\n", obj->service_uri);
+				printk(KERN_INFO "linber:: End job spourious job %s\n", obj->service_uri);
 			}
 		}
 	}
 	return 0;
 }
 
+static void get_system_status(unsigned long ioctl_param){
+	system_status system;
+	mutex_lock(&System_mutex);
+	system.system.max_concurrent_workers = system_max_concurrent_workers;
+	system.system.requests_count = system_requests_count;
+	system.system.serving_load = system_serving_load;
+	system.system.serving_requests_count = system_serving_requests_count;
+	system.services_count = system_services_count;
+	mutex_unlock(&System_mutex);
+	copy_to_user((void*)ioctl_param, &system, sizeof(system_status));
+}
 
 //-------------------------------------------------------------
 static long		linber_ioctl(struct file *f, unsigned int cmd, unsigned long ioctl_param){ 
 	int ret;
 	char *uri_tmp;
-	linber_service_struct *obj = kmalloc(sizeof(linber_service_struct), GFP_KERNEL);
-	copy_from_user(obj, (void *)ioctl_param, sizeof(linber_service_struct));
-	uri_tmp = kmalloc(obj->service_uri_len, GFP_KERNEL);
-	copy_from_user((char*)uri_tmp, (char*)obj->service_uri, obj->service_uri_len);
-	obj->service_uri = uri_tmp;
+	linber_service_struct *obj;
+	if(cmd != IOCTL_SYSTEM_STATUS){
+		obj = kmalloc(sizeof(linber_service_struct), GFP_KERNEL);
+		copy_from_user((void*)obj, (void*)ioctl_param, sizeof(linber_service_struct));
+		uri_tmp = kmalloc(obj->service_uri_len + 1, GFP_KERNEL);
+		copy_from_user((void*)uri_tmp, (void*)obj->service_uri, obj->service_uri_len);
+		uri_tmp[obj->service_uri_len] = '\0';
+		printk(KERN_ERR "linber:: uri:%s, len:%d\n", uri_tmp, obj->service_uri_len);
+		obj->service_uri = uri_tmp;
+	}
 
 	switch(cmd){
 		case IOCTL_REGISTER_SERVICE:
@@ -337,12 +358,18 @@ static long		linber_ioctl(struct file *f, unsigned int cmd, unsigned long ioctl_
 			ret = linber_End_Job(obj);
 			break;
 
+		case IOCTL_SYSTEM_STATUS:
+			get_system_status(ioctl_param);
+			break;
+
 		default:
 			printk(KERN_ERR "linber:: IOCTL operation %d not implemented\n", cmd);
 			ret = -1;
 			break;
 	}
-	kfree(obj);
+	if(cmd != IOCTL_SYSTEM_STATUS){
+		kfree(obj);
+	}
 	return 0;
 }
 
@@ -390,6 +417,11 @@ int init_module(void) {
 	}
 
 	initialize_queue(&ServicesHead);
+	system_requests_count = 0;
+	system_serving_load = 0;
+	system_serving_requests_count = 0;
+	system_max_concurrent_workers = 0;
+	mutex_init(&System_mutex);
 
 	return 0;
 }
