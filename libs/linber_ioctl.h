@@ -12,7 +12,10 @@
 #define IOCTL_REGISTER_SERVICE_WORKER	_IOR(MAJOR_NUM, 2, char*)
 #define IOCTL_START_JOB_SERVICE			_IOW(MAJOR_NUM, 3, char*)
 #define IOCTL_END_JOB_SERVICE			_IOW(MAJOR_NUM, 4, char*)
-#define IOCTL_SYSTEM_STATUS				_IOW(MAJOR_NUM, 5, char*)
+#define IOCTL_DESTROY_SERVICE			_IOW(MAJOR_NUM, 5, char*)
+
+#define IOCTL_SYSTEM_STATUS				_IOW(MAJOR_NUM, 6, char*)
+
 
 #define DEVICE_FILE_NAME		"linber"
 #define DEVICE_FILE_FULL_PATH	"/dev/" DEVICE_FILE_NAME
@@ -25,13 +28,17 @@ typedef struct linber_service_struct {
 	union params{
 		struct registration {
 			unsigned int exec_time;
-			unsigned int max_workers;
+			unsigned int max_concurrent_workers;
 			unsigned long *ret_service_id;
 		} registration;
 
 		struct register_worker {
 			unsigned int *ret_worker_id;
 		} register_worker;
+
+		struct destroy_service {
+			unsigned long service_id;
+		} destroy_service;
 
 		struct request {
 			unsigned int rel_deadline;
