@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <sys/time.h>
+#include <signal.h>
 
 #include "../libs/linber_service_api.h"
 
@@ -24,12 +25,23 @@ typedef struct{
 	int exec_time;
 } thread_info;
 
+int abort_and_Exit = 0;
+
+void sig_handler(int signo){
+  if (signo == SIGINT){
+    printf("received SIGINT\n");
+	abort_and_Exit = 1;
+  }
+}
 
 void *thread_job(void *args){
 	thread_info worker = *(thread_info*)args;
 	printf("started_thread id:%d, service:%s\n", worker.id, worker.service_uri);
 	int job_num = 1;
 	while(1){
+		if(abort_and_Exit){
+			break;
+		}
 		linber_start_job_service(worker.service_uri, worker.uri_len, worker.service_id, worker.id);
 		printf("thread id:%d job#:%d, serving request for service:%s\n", worker.id, job_num++, worker.service_uri);
 		struct timeval start, end;
@@ -39,6 +51,9 @@ void *thread_job(void *args){
 			gettimeofday(&end, NULL);
 			passed_millis = (end.tv_sec - start.tv_sec) * 1000 + (end.tv_usec - start.tv_usec) / 1000;
 		} while(passed_millis < worker.exec_time);
+		if(abort_and_Exit){
+			break;
+		}
 		linber_end_job_service(worker.service_uri, worker.uri_len, worker.service_id, worker.id);
 	}
 	return NULL;
@@ -50,6 +65,10 @@ int main(int argc,char* argv[]){
 	int job_exec_time = DEFAULT_JOB_EXEC_TIME;
 	char *service_uri = DEFAULT_SERVICE_URI;
 	int uri_len = strlen(service_uri);
+
+	if (signal(SIGINT, sig_handler) == SIG_ERR)
+		printf("\ncan't catch SIGINT\n");
+
 	if(argc >= 2){
 		service_uri = malloc(strlen(argv[1])+1);
 		strcpy(service_uri, argv[1]);

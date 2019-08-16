@@ -4,6 +4,9 @@
 #include <linux/ioctl.h>
 #define MAJOR_NUM	239
 
+#define MAX_SERVICES	10
+#define MAX_URI_LEN		64
+
 #define IOCTL_REQUEST_SERVICE			_IOW(MAJOR_NUM, 0, char*)
 #define IOCTL_REGISTER_SERVICE			_IOR(MAJOR_NUM, 1, char*)
 #define IOCTL_REGISTER_SERVICE_WORKER	_IOR(MAJOR_NUM, 2, char*)
@@ -51,14 +54,19 @@ typedef struct linber_service_struct {
 } linber_service_struct;
 
 typedef struct service_status{
+	char * uri;
+	unsigned int uri_len;
+	unsigned long id;
 	unsigned int requests_count;
-	unsigned int serving_load;
+	unsigned int serving_time;
 	unsigned int serving_requests_count;
 	unsigned int max_concurrent_workers;
 } service_status;
 
 typedef struct system_status {
-	service_status system;
+	unsigned int requests_count;
+	unsigned int serving_requests_count;
+	unsigned int max_concurrent_workers;
 	unsigned int services_count;
 	service_status *services;
 }system_status;
