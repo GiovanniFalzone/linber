@@ -44,7 +44,7 @@ void *thread_job(void *args){
 	int job_num = 1;
 	while(1){
 		ret = linber_start_job_service(service_uri, uri_len, worker.service_id, worker.id);
-		if((ret <0) || abort_and_Exit){ // if spuroius
+		if(ret < 0){
 			break;
 		}
 		printf("thread id:%d job#:%d, serving request for service:%s\n", worker.id, job_num++, service_uri);
@@ -56,9 +56,6 @@ void *thread_job(void *args){
 			passed_millis = (end.tv_sec - start.tv_sec) * 1000 + (end.tv_usec - start.tv_usec) / 1000;
 		} while(passed_millis < worker.exec_time);
 		ret = linber_end_job_service(service_uri, uri_len, worker.service_id, worker.id);
-		if((ret <0) || abort_and_Exit){ // if spuroius
-			break;
-		}
 	}
 	printf("Thread %d died\n", worker.id);
 	return NULL;

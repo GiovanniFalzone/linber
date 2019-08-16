@@ -21,7 +21,11 @@ typedef struct{
 void *thread_job(void *args){
 	thread_info worker = *(thread_info*)args;
 	printf("sending request id:%d, service:%s\n", worker.id, worker.service_uri);
-	linber_request_service(worker.service_uri, worker.uri_len, REL_DEADLINE);
+	int ret = linber_request_service(worker.service_uri, worker.uri_len, REL_DEADLINE);
+	if(ret == LINBER_ABORT_REQUEST){
+		printf("request aborted\n");
+	}
+
 	return NULL;
 }
 
