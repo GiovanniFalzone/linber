@@ -55,10 +55,12 @@ typedef struct linber_service_struct {
 		struct start_job{
 			unsigned int worker_id;	// start job
 			unsigned long service_id;
+			unsigned int *ret_slot_id;
 		} start_job;
 
 		struct end_job{
 			unsigned int worker_id;
+			unsigned int slot_id;
 			unsigned long service_id;
 			char *ret;
 			int ret_len;

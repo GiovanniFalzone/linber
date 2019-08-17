@@ -39,11 +39,12 @@ void sig_handler(int signo){
 
 void *thread_job(void *args){
 	int ret;
+	int job_num = 1;
+	unsigned int slot_id;
 	thread_info worker = *(thread_info*)args;
 	printf("started_thread id:%d, service:%s\n", worker.id, service_uri);
-	int job_num = 1;
 	while(1){
-		ret = linber_start_job_service(service_uri, uri_len, worker.service_id, worker.id);
+		ret = linber_start_job_service(service_uri, uri_len, worker.service_id, worker.id, &slot_id);
 		if(ret < 0){
 			break;
 		}
@@ -55,7 +56,7 @@ void *thread_job(void *args){
 			gettimeofday(&end, NULL);
 			passed_millis = (end.tv_sec - start.tv_sec) * 1000 + (end.tv_usec - start.tv_usec) / 1000;
 		} while(passed_millis < worker.exec_time);
-		ret = linber_end_job_service(service_uri, uri_len, worker.service_id, worker.id);
+		ret = linber_end_job_service(service_uri, uri_len, worker.service_id, worker.id, slot_id);
 	}
 	printf("Thread %d died\n", worker.id);
 	return NULL;
