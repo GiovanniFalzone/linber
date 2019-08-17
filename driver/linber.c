@@ -67,7 +67,7 @@ struct ServingRequests{
 
 typedef struct ServiceNode{
 	struct list_head list;
-	unsigned long id;
+	unsigned long token;
 	char *uri;
 	int max_concurrent_workers;
 	int count_workers;
@@ -96,30 +96,29 @@ static int initialize_queue(struct list_head *head){
 }
 
 static RequestNode *Enqueue_Request(struct list_head *head, int id){
-	RequestNode *node;
-	node = kmalloc(sizeof(*node) ,GFP_KERNEL);
-	node->id = id;
-	node->cmd = LINBER_ABORT_REQUEST;	// if not fixed will be aborted
-	sema_init(&node->Request_sem, 0);
-	list_add_tail(&node->list, head);
-	return node;
+	RequestNode *req_node;
+	req_node = kmalloc(sizeof(*req_node) ,GFP_KERNEL);
+	req_node->id = id;
+	req_node->cmd = LINBER_ABORT_REQUEST;	// if not fixed will be aborted
+	sema_init(&req_node->Request_sem, 0);
+	list_add_tail(&req_node->list, head);
+	return req_node;
 }
 
 static RequestNode *Dequeue_Request(struct list_head *head){
-	RequestNode *node = NULL;
+	RequestNode *req_node = NULL;
 	if(list_empty(head)){
 		;
 	} else {
-		node = list_first_entry(head, RequestNode , list);
-		list_del(&node->list);
+		req_node = list_first_entry(head, RequestNode , list);
+		list_del(&req_node->list);
 	}
-	return node;
+	return req_node;
 }
 //------------------------------------------------------
 
 static int Enqueue_Service(struct list_head *head, ServiceNode *node){
 	list_add_tail(&node->list, head);
-	printk(KERN_INFO "linber:: Enqueue Service:%lu\n", node->id);
 	return 0;
 }
 
@@ -182,7 +181,7 @@ static ServiceNode * linber_create_service(linber_service_struct *obj){
 	ServiceNode *node = NULL;
 	node = kmalloc(sizeof(*node) ,GFP_KERNEL);
 	initialize_queue(&node->RequestsHead);
-	get_random_bytes(&node->id, sizeof(node->id));
+	get_random_bytes(&node->token, sizeof(node->token));
 	node->uri = obj->service_uri;
 	node->exec_time = obj->service_params.registration.exec_time;
 	node->max_concurrent_workers = obj->service_params.registration.max_concurrent_workers;
@@ -207,18 +206,18 @@ static ServiceNode * linber_create_service(linber_service_struct *obj){
 		system_services_count++;
 		system_max_concurrent_workers += node->max_concurrent_workers;
 	mutex_unlock(&System_mutex);
-	printk(KERN_INFO "linber:: New Service id:%lu %s, workers:%d,  exec time:%d\n", node->id, node->uri, node->max_concurrent_workers, node->exec_time);
+	printk(KERN_INFO "linber:: New Service token:%lu %s, workers:%d,  exec time:%d\n", node->token, node->uri, node->max_concurrent_workers, node->exec_time);
 	return node;
 }
 
 //------------------------------------------------------
 static int linber_register_service(linber_service_struct *obj){
-	ServiceNode *node;
+	ServiceNode *ser_node;
 	printk(KERN_INFO "linber:: IOCTL Registration received\n");
-	node = findService(obj->service_uri);
-	if(node == NULL){
-		node = linber_create_service(obj);
-		copy_to_user(obj->service_params.registration.ret_service_id, &node->id, sizeof(node->id));
+	ser_node = findService(obj->service_uri);
+	if(ser_node == NULL){
+		ser_node = linber_create_service(obj);
+		copy_to_user(obj->service_params.registration.ret_service_token, &ser_node->token, sizeof(ser_node->token));
 	} else {
 		printk(KERN_INFO "linber:: Service:%s already exists\n", obj->service_uri);
 	}
@@ -269,11 +268,11 @@ static int linber_register_service_worker(linber_service_struct *obj){
 	return 0;
 }
 
-static int linber_service_Worker_check_id(ServiceNode *ser_node, unsigned long service_id, int worker_id){
-	if((ser_node->id == service_id) && (worker_id >= 0)){
+static int linber_service_Worker_check_id(ServiceNode *ser_node, unsigned long service_token, int worker_id){
+	if((ser_node->token == service_token) && (worker_id >= 0)){
 		return 1;
 	}
-	printk(KERN_INFO "linber:: Wrong service id %lu or worker id %d for service: %s\n", service_id, worker_id, ser_node->uri);
+	printk(KERN_INFO "linber:: Wrong service id %lu or worker id %d for service: %s\n", service_token, worker_id, ser_node->uri);
 	return 0;
 }
 
@@ -299,12 +298,12 @@ static int linber_Start_Job(linber_service_struct *obj){
 	RequestNode *req_node;
 	ServiceNode *ser_node = findService(obj->service_uri);
 	unsigned int worker_id, slot_id;
-	unsigned long service_id;
+	unsigned long service_token;
 	if(ser_node != NULL){
 		// check arguments
 		worker_id = obj->service_params.start_job.worker_id;
-		service_id = obj->service_params.start_job.service_id;
-		if(!linber_service_Worker_check_id(ser_node, service_id, worker_id)){
+		service_token = obj->service_params.start_job.service_token;
+		if(!linber_service_Worker_check_id(ser_node, service_token, worker_id)){
 			return LINBER_KILL_WORKER;
 		}
 
@@ -329,7 +328,6 @@ static int linber_Start_Job(linber_service_struct *obj){
 		mutex_unlock(&ser_node->service_mutex);
 
 		slot_id = get_slot(ser_node, worker_id, &slot);
-		printk(KERN_INFO "linber:: end: slot id %d\n", slot_id);
 		mutex_lock(&slot->slot_mutex);	// block until it ir sure that can execute the request
 			mutex_lock(&ser_node->service_mutex);
 				req_node = Dequeue_Request(&ser_node->RequestsHead);
@@ -373,13 +371,12 @@ static int linber_End_Job(linber_service_struct *obj){
 	RequestNode *req_node;
 	ServiceNode *ser_node = findService(obj->service_uri);
 	int worker_id, slot_id;
-	unsigned long service_id;
+	unsigned long service_token;
 	if(ser_node != NULL){
 		worker_id = obj->service_params.end_job.worker_id;
-		service_id = obj->service_params.end_job.service_id;
+		service_token = obj->service_params.end_job.service_token;
 		slot_id = obj->service_params.end_job.slot_id;
-		printk(KERN_INFO "linber:: end: slot id %d\n", slot_id);
-		if(!linber_service_Worker_check_id(ser_node, service_id, worker_id)){
+		if(!linber_service_Worker_check_id(ser_node, service_token, worker_id)){
 			return LINBER_KILL_WORKER;
 		} else {
 			slot = get_slot_by_id(ser_node,slot_id);
@@ -413,7 +410,7 @@ static int linber_destroy_service(linber_service_struct *obj){
 	ServiceNode *node;
 	node = findService(obj->service_uri);
 	if(node != NULL){
-		if(linber_service_Worker_check_id(node, obj->service_params.destroy_service.service_id, 0)){
+		if(linber_service_Worker_check_id(node, obj->service_params.destroy_service.service_token, 0)){
 			printk(KERN_INFO "linber:: destroying service %s\n", obj->service_uri);
 			destroy_service(node);
 			return 0;
@@ -429,27 +426,33 @@ static int linber_get_system_status(void* system_user){
 	int i = 0;
 
 	copy_from_user(&system, system_user, sizeof(system_status));
-	mutex_lock(&System_mutex);
 	system.max_concurrent_workers = system_max_concurrent_workers;
 	system.requests_count = system_requests_count;
 	system.serving_requests_count = system_serving_requests_count;
 	system.services_count = system_services_count;
 	if(system_services_count > 0){
 		copy_from_user(services, system.services, MAX_SERVICES * sizeof(service_status));
+		mutex_lock(&System_mutex);
 		list_for_each_entry(ser_node, &ServicesHead, list){
 			if(i < system_services_count){
 				services[i].uri_len = strlen(ser_node->uri);
 				copy_to_user(services[i].uri, ser_node->uri, services[i].uri_len);
-				services[i].id = ser_node->id;
+				services[i].exec_time = ser_node->exec_time;
 				services[i].max_concurrent_workers = ser_node->max_concurrent_workers;
 				services[i].requests_count = ser_node->num_requests;
-				services[i].serving_time = ser_node->serving_time;
 				services[i].serving_requests_count = ser_node->Serving_requests.serving_count;
+				services[i].serving_time = 0;
+				if(ser_node->serving_time > 0 && ser_node->Serving_requests.num_active_slots > 0){
+					services[i].serving_time = ser_node->exec_time + ser_node->serving_time / ser_node->Serving_requests.num_active_slots;
+					if(services[i].serving_time > services[i].exec_time){
+						services[i].serving_time = services[i].serving_time - (services[i].serving_time)%services[i].exec_time;
+					}
+				}
 			}
 			i++;
 		}
+		mutex_unlock(&System_mutex);
 	}
-	mutex_unlock(&System_mutex);
 	copy_to_user(system_user, &system, sizeof(system_status));
 	copy_to_user(system.services, services, system_services_count * sizeof(service_status));
 	kfree(services);

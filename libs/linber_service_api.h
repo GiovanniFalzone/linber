@@ -48,7 +48,7 @@ int linber_exit(){
 	return 0;
 }
 
-int linber_register_service(char * service_uri, unsigned int uri_len, unsigned int exec_time, unsigned int max_workers, unsigned long * service_id){
+int linber_register_service(char * service_uri, unsigned int uri_len, unsigned int exec_time, unsigned int max_workers, unsigned long * service_token){
 	if(linber_device_file_desc < 0){
 		printf("Linber Register: device file error\n");
 		return LINBER_ERROR_DEVICE_FILE;
@@ -62,7 +62,7 @@ int linber_register_service(char * service_uri, unsigned int uri_len, unsigned i
 	param.service_uri_len = uri_len;
 	param.service_params.registration.exec_time = exec_time;
 	param.service_params.registration.max_concurrent_workers = max_workers;
-	param.service_params.registration.ret_service_id = service_id;
+	param.service_params.registration.ret_service_token = service_token;
 	return ioctl_send(linber_device_file_desc, IOCTL_REGISTER_SERVICE, param);
 }
 
@@ -100,7 +100,7 @@ int linber_request_service(char * service_uri, unsigned int uri_len, unsigned in
 	return ioctl_send(linber_device_file_desc, IOCTL_REQUEST_SERVICE, param);
 }
 
-int linber_start_job_service(char * service_uri, unsigned int uri_len, unsigned long service_id, unsigned int worker_id, unsigned int * slot_id){
+int linber_start_job_service(char * service_uri, unsigned int uri_len, unsigned long service_token, unsigned int worker_id, unsigned int * slot_id){
 	if(linber_device_file_desc < 0){
 		printf("Linber start job: device file error\n");
 		return LINBER_ERROR_DEVICE_FILE;
@@ -113,12 +113,12 @@ int linber_start_job_service(char * service_uri, unsigned int uri_len, unsigned 
 	param.service_uri = service_uri;
 	param.service_uri_len = uri_len;
 	param.service_params.start_job.worker_id = worker_id;
-	param.service_params.start_job.service_id = service_id;
+	param.service_params.start_job.service_token = service_token;
 	param.service_params.start_job.ret_slot_id = slot_id;
 	return ioctl_send(linber_device_file_desc, IOCTL_START_JOB_SERVICE, param);
 }
 
-int linber_end_job_service(char * service_uri, unsigned int uri_len, unsigned long service_id, unsigned int worker_id, unsigned int slot_id){
+int linber_end_job_service(char * service_uri, unsigned int uri_len, unsigned long service_token, unsigned int worker_id, unsigned int slot_id){
 	if(linber_device_file_desc < 0){
 		printf("Linber end job: device file error\n");
 		return LINBER_ERROR_DEVICE_FILE;
@@ -131,14 +131,14 @@ int linber_end_job_service(char * service_uri, unsigned int uri_len, unsigned lo
 	param.service_uri = service_uri;
 	param.service_uri_len = uri_len;
 	param.service_params.end_job.worker_id = worker_id;
-	param.service_params.end_job.service_id = service_id;
+	param.service_params.end_job.service_token = service_token;
 	param.service_params.end_job.slot_id = slot_id;
 //	param.service_params.end_job.ret;
 //	param.service_params.end_job.ret_len;
 	return ioctl_send(linber_device_file_desc, IOCTL_END_JOB_SERVICE, param);
 }
 
-int linber_destroy_service(char * service_uri, unsigned int uri_len, unsigned long service_id){
+int linber_destroy_service(char * service_uri, unsigned int uri_len, unsigned long service_token){
 	if(linber_device_file_desc < 0){
 		printf("Linber start job: device file error\n");
 		return LINBER_ERROR_DEVICE_FILE;
@@ -150,7 +150,7 @@ int linber_destroy_service(char * service_uri, unsigned int uri_len, unsigned lo
 	linber_service_struct param;
 	param.service_uri = service_uri;
 	param.service_uri_len = uri_len;
-	param.service_params.destroy_service.service_id = service_id;
+	param.service_params.destroy_service.service_token = service_token;
 	return ioctl_send(linber_device_file_desc, IOCTL_DESTROY_SERVICE, param);
 }
 

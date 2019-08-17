@@ -18,13 +18,12 @@
 
 char *service_uri = DEFAULT_SERVICE_URI;
 int uri_len;
-unsigned long service_id;
+unsigned long service_token;
 int abort_and_Exit = 0;
 
 typedef struct{
 	pthread_t tid;
-	int id;
-	unsigned long service_id;
+	unsigned long service_token;
 	int exec_time;
 } thread_info;
 
@@ -33,22 +32,24 @@ void sig_handler(int signo){
   if (signo == SIGINT){
     printf("received SIGINT\n");
 	abort_and_Exit = 1;
-	linber_destroy_service(service_uri, uri_len, service_id);
+	linber_destroy_service(service_uri, uri_len, service_token);
   }
 }
 
 void *thread_job(void *args){
 	int ret;
 	int job_num = 1;
+	unsigned int worker_id;
 	unsigned int slot_id;
 	thread_info worker = *(thread_info*)args;
-	printf("started_thread id:%d, service:%s\n", worker.id, service_uri);
+	linber_register_service_worker(service_uri, uri_len, &worker_id);
+	printf("started_thread id:%d, service:%s\n", worker_id, service_uri);
 	while(1){
-		ret = linber_start_job_service(service_uri, uri_len, worker.service_id, worker.id, &slot_id);
+		ret = linber_start_job_service(service_uri, uri_len, worker.service_token, worker_id, &slot_id);
 		if(ret < 0){
 			break;
 		}
-		printf("thread id:%d job#:%d, serving request for service:%s\n", worker.id, job_num++, service_uri);
+		printf("thread id:%d job#:%d, serving request for service:%s\n", worker_id, job_num++, service_uri);
 		struct timeval start, end;
 		gettimeofday(&start, NULL);
 		unsigned long passed_millis = 0;
@@ -56,9 +57,9 @@ void *thread_job(void *args){
 			gettimeofday(&end, NULL);
 			passed_millis = (end.tv_sec - start.tv_sec) * 1000 + (end.tv_usec - start.tv_usec) / 1000;
 		} while(passed_millis < worker.exec_time);
-		ret = linber_end_job_service(service_uri, uri_len, worker.service_id, worker.id, slot_id);
+		ret = linber_end_job_service(service_uri, uri_len, worker.service_token, worker_id, slot_id);
 	}
-	printf("Thread %d died\n", worker.id);
+	printf("Thread %d died\n", worker_id);
 	return NULL;
 }
 
@@ -92,16 +93,12 @@ int main(int argc,char* argv[]){
 	printf("Running Service Server %s with %d workers, job exec time:%d\n", service_uri, max_concurrent_workers, job_exec_time);
 
 	linber_init();
-	linber_register_service(service_uri, uri_len, job_exec_time, max_concurrent_workers, &service_id);
-	printf("%lu\n", service_id);
+	linber_register_service(service_uri, uri_len, job_exec_time, max_concurrent_workers, &service_token);
 	printf("starting thread pool\n");
-	int workers_num = max_concurrent_workers * DAFAULT_SPARE_WORKER;
+	int workers_num = max_concurrent_workers + DAFAULT_SPARE_WORKER;
 	thread_info worker[workers_num];
 	for(int i=0; i<workers_num; i++){
-		unsigned int worker_id;
-		linber_register_service_worker(service_uri, uri_len, &worker_id);
-		worker[i].id = worker_id;
-		worker[i].service_id = service_id;
+		worker[i].service_token = service_token;
 		worker[i].exec_time = job_exec_time;
 		int terr = pthread_create(&worker[i].tid, NULL, thread_job, (void*)&worker[i]);
 		if (terr != 0){

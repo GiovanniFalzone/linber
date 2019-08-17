@@ -35,7 +35,7 @@ typedef struct linber_service_struct {
 		struct registration {
 			unsigned int exec_time;
 			unsigned int max_concurrent_workers;
-			unsigned long *ret_service_id;
+			unsigned long *ret_service_token;
 		} registration;
 
 		struct register_worker {
@@ -43,7 +43,7 @@ typedef struct linber_service_struct {
 		} register_worker;
 
 		struct destroy_service {
-			unsigned long service_id;
+			unsigned long service_token;
 		} destroy_service;
 
 		struct request {
@@ -54,16 +54,18 @@ typedef struct linber_service_struct {
 
 		struct start_job{
 			unsigned int worker_id;	// start job
-			unsigned long service_id;
+			unsigned long service_token;
 			unsigned int *ret_slot_id;
+			char *ret_args;
+			int ret_args_len;
 		} start_job;
 
 		struct end_job{
 			unsigned int worker_id;
+			unsigned long service_token;
 			unsigned int slot_id;
-			unsigned long service_id;
-			char *ret;
-			int ret_len;
+			char *ret_result;
+			int ret_result_len;
 		} end_job;
 	} service_params;
 } linber_service_struct;
@@ -71,7 +73,7 @@ typedef struct linber_service_struct {
 typedef struct service_status{
 	char * uri;
 	unsigned int uri_len;
-	unsigned long id;
+	unsigned int exec_time;
 	unsigned int requests_count;
 	unsigned int serving_time;
 	unsigned int serving_requests_count;
