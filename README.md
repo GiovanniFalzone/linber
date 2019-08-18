@@ -4,36 +4,58 @@ Linber API uses IOCTL to comunicate with the Linber module through the file /dev
 
 ## Create Service
 - ***Input:***
-	- *service uri* to identify the service	
-	- *uri len*		string length of the uri
-	- *exec time*	time needed to compute the service
-	- *max workers*	maximum number of workers working on parallel requests
+	- *service uri*, to identify the service	
+	- *uri length*,		string length of the uri
+	- *exec time*,	time needed to compute the service
+	- *max workers*,	maximum number of workers working on parallel requests
 - ***Output:***
-	- *service token* 64 bit assigned by the module to check the other requests
+	- *service token*, 64 bit assigned by the module to check the other requests
 
 ## Register Worker
-linber_register_service_worker(char * service_uri, unsigned int uri_len, unsigned int * worker_id)
 - ***Input:***
-	- *service uri*
-	- *uri len*
+	- *service uri*, to identify the service	
+	- *uri len*, string length of the uri
+	- *service token*, for safety reason
 - ***Output:***
-	- *worker id*
+	- *worker id*, assigned worker id, minimum value 0
 
 ## Worker Start Job
 - **Input:**
+	- *service uri*, to identify the service	
+	- *uri len*, string length of the uri
+	- *service token*, for safety reason
+	- *worker id*, assigned worker id, minimum value 0
 - **Output:**
+	- *slot id*, assigned slot id where the request is stored
+	- *service parameters*, string containing the application level service's parameters
+	- *service parameters length*, lenght of the service's parameters string
 
 ## Worker End Job
 - **Input:**
-- **Output:**
+	- *service uri*, to identify the service	
+	- *uri len*, string length of the uri
+	- *service token*, for safety reason
+	- *worker id*, assigned worker id, minimum value 0
+	- *slot id*, assigned slot id where the request is stored
+	- *service result*, string containing the application level service's parameters
+	- *service result length*, lenght of the service's parameters string
 
 ## Destroy Service
 - **Input:**
-- **Output:**
+	- *service uri*, to identify the service	
+	- *uri len*, string length of the uri
+	- *service token*, for safety reason
 
 ## Request Service
 - **Input:**
+	- *service uri*, to identify the service	
+	- *uri len*, string length of the uri
+	- *service parameters*, string containing the application level service's parameters
+	- *service parameters length*, lenght of the service's parameters string
 - **Output:**
+	- *service result*, string containing the application level service's parameters
+	- *service result length*, lenght of the service's parameters string
+
 
 ### Info and howto
 Distro: Ubuntu 7.4.0-1ubuntu1~18.04.1\
