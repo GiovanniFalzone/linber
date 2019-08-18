@@ -38,6 +38,7 @@ typedef struct linber_service_struct {
 		} registration;
 
 		struct register_worker {
+			unsigned long service_token;
 			unsigned int *ret_worker_id;
 		} register_worker;
 

@@ -415,11 +415,14 @@ static int linber_register_service_worker(linber_service_struct *obj){
 	ServiceNode *ser_node = findService(obj->service_uri);
 	int worker_id;
 	if(ser_node != NULL){
+		if(!Service_check_Worker(ser_node, obj->linber_params.register_worker.service_token, 0)){
+			return -1;
+		}
 		mutex_lock(&ser_node->service_mutex);
 			ser_node->count_workers++;
 			worker_id = ser_node->next_worker_id++;
-			put_user(worker_id, obj->linber_params.register_worker.ret_worker_id);
 		mutex_unlock(&ser_node->service_mutex);
+		put_user(worker_id, obj->linber_params.register_worker.ret_worker_id);
 	}
 	return 0;
 }

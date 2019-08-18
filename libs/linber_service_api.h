@@ -56,7 +56,7 @@ int linber_register_service(char * service_uri, unsigned int uri_len, unsigned i
 	return ioctl_send(linber_device_file_desc, IOCTL_REGISTER_SERVICE, &param);
 }
 
-int linber_register_service_worker(char * service_uri, unsigned int uri_len, unsigned int * worker_id){
+int linber_register_service_worker(char * service_uri, unsigned int uri_len, unsigned long service_token, unsigned int * worker_id){
 	if(linber_device_file_desc < 0){
 		printf("Linber Register: device file error\n");
 		return LINBER_ERROR_DEVICE_FILE;
@@ -69,6 +69,7 @@ int linber_register_service_worker(char * service_uri, unsigned int uri_len, uns
 	param.service_uri = service_uri;
 	param.service_uri_len = uri_len;
 	param.linber_params.register_worker.ret_worker_id = worker_id;
+	param.linber_params.register_worker.service_token;
 	return ioctl_send(linber_device_file_desc, IOCTL_REGISTER_SERVICE_WORKER, &param);
 }
 
