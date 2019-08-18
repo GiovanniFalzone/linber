@@ -63,7 +63,7 @@ struct ServingRequests{
 	struct mutex Serving_mutex;
 	unsigned int num_active_slots;
 	unsigned int max_slots;
-	unsigned int balanced_slots;
+	unsigned int minimum_slots;
 	unsigned int serving_count;
 };
 
@@ -191,8 +191,8 @@ static ServiceNode * linber_create_service(linber_service_struct *obj){
 	node->destroy_me = 0;
 	node->Serving_requests.serving_count = 0;
 	node->Serving_requests.max_slots = node->max_concurrent_workers;
-	node->Serving_requests.balanced_slots = (node->Serving_requests.max_slots + 1)>>1;	// divided by 2
-	node->Serving_requests.num_active_slots = node->Serving_requests.balanced_slots;
+	node->Serving_requests.minimum_slots = 1;
+	node->Serving_requests.num_active_slots = node->Serving_requests.minimum_slots;
 	node->Serving_requests.Serving_slots_arr = kmalloc(node->Serving_requests.max_slots*sizeof(request_slot), GFP_KERNEL);
 	for(i=0; i<node->Serving_requests.max_slots; i++){
 		mutex_init(&node->Serving_requests.Serving_slots_arr[i].slot_mutex);
@@ -216,19 +216,7 @@ static RequestNode* insert_request(ServiceNode *ser_node, char *service_params, 
 		req_node = Enqueue_Request(&ser_node->RequestsHead);
 		req_node->service_params = service_params;
 		req_node->service_params_len = service_params_len;
-
 		ser_node->num_requests++;
-		if(ser_node->num_requests > ser_node->Serving_requests.num_active_slots){
-			ser_node->Serving_requests.num_active_slots++;
-			if(ser_node->Serving_requests.num_active_slots > ser_node->Serving_requests.max_slots){
-				ser_node->Serving_requests.num_active_slots = ser_node->Serving_requests.max_slots;
-			}
-		} else {
-			ser_node->Serving_requests.num_active_slots--;
-			if(ser_node->Serving_requests.num_active_slots < ser_node->Serving_requests.balanced_slots){
-				ser_node->Serving_requests.num_active_slots = ser_node->Serving_requests.balanced_slots;
-			}
-		}
 		ser_node->serving_time += ser_node->exec_time;
 		up(&ser_node->Workers_sem);
 	mutex_unlock(&ser_node->service_mutex);
@@ -358,6 +346,19 @@ static void unload_slot_and_get_request(ServiceNode *ser_node, RequestNode **req
 	}
 }
 
+static inline void service_load_balancing(ServiceNode *ser_node){
+	if(ser_node->num_requests > ser_node->Serving_requests.num_active_slots){
+		ser_node->Serving_requests.num_active_slots++;
+		if(ser_node->Serving_requests.num_active_slots > ser_node->Serving_requests.max_slots){
+			ser_node->Serving_requests.num_active_slots = ser_node->Serving_requests.max_slots;
+		}
+	} else {
+		ser_node->Serving_requests.num_active_slots--;
+		if(ser_node->Serving_requests.num_active_slots < ser_node->Serving_requests.minimum_slots){
+			ser_node->Serving_requests.num_active_slots = ser_node->Serving_requests.minimum_slots;
+		}
+	}
+}
 
 //------------------------------------------------------
 static int linber_register_service(linber_service_struct *obj){
@@ -485,7 +486,6 @@ static int linber_End_Job(linber_service_struct *obj){
 					req_node->service_result_len = obj->linber_params.end_job.service_result_len;
 					req_node->service_result = kmalloc(req_node->service_result_len, GFP_KERNEL);
 					copy_from_user(req_node->service_result, obj->linber_params.end_job.service_result, req_node->service_result_len);
-
 					up(&req_node->Request_sem);	// end job
 				} else {
 					printk(KERN_INFO "linber:: End job spourious job %s\n", obj->service_uri);
@@ -497,6 +497,7 @@ static int linber_End_Job(linber_service_struct *obj){
 				return LINBER_KILL_WORKER;
 			}
 		}
+		service_load_balancing(ser_node);
 	}
 	return 0;
 }

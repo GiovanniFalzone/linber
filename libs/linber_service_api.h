@@ -69,7 +69,7 @@ int linber_register_service_worker(char * service_uri, unsigned int uri_len, uns
 	param.service_uri = service_uri;
 	param.service_uri_len = uri_len;
 	param.linber_params.register_worker.ret_worker_id = worker_id;
-	param.linber_params.register_worker.service_token;
+	param.linber_params.register_worker.service_token = service_token;
 	return ioctl_send(linber_device_file_desc, IOCTL_REGISTER_SERVICE_WORKER, &param);
 }
 

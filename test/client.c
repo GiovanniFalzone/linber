@@ -45,6 +45,7 @@ int main(int argc,char* argv[]){
 	char *service_uri = DEFAULT_SERVICE_URI;
 	int uri_len = strlen(service_uri);
 	int concurrent_requests = DEFAULT_CONCURRENT_REQUESTS;
+	int max_inter_request;
 	if(argc >= 2){
 		service_uri = malloc(strlen(argv[1])+1);
 		strcpy(service_uri, argv[1]);
@@ -56,7 +57,12 @@ int main(int argc,char* argv[]){
 			concurrent_requests = n;
 		}
 	}
-
+	if(argc >= 4){
+		int n = atoi(argv[3]);
+		if(n > 0){
+			max_inter_request = n;
+		}
+	}
 	printf("Running client test with %d concurrent requests on service %s\n", concurrent_requests, service_uri);
 	linber_init();
 
@@ -65,6 +71,7 @@ int main(int argc,char* argv[]){
 		worker[i].uri_len = uri_len;
 		worker[i].service_uri = service_uri;
 		worker[i].id = i;
+		usleep(1000*(rand()%max_inter_request + 1));
 		int terr = pthread_create(&worker[i].tid, NULL, thread_job, (void*)&worker[i]);
 		if (terr != 0){
 			printf("Thread creation error: %d\n", terr);
