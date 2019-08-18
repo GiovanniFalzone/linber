@@ -15,22 +15,12 @@ case ${cmd} in
 	rmmod)
 		sh -c 'sudo rmmod linber'
 		;; 
-
 	updatemod)
 		sh -c 'cd driver && make && sudo rmmod linber && sudo insmod linber.ko'
 		;;
 
-	runtest)
-		test/server
-		test/client
-		;;
-
-	log)
-		cat /var/log/syslog | grep 'linber::'
-		;;
-
    *)  
-	  echo "`basename ${0}`:usage: [makeall] | [clean] | [insmod] | [rmmod] | [runtest]" 
+	  echo "`basename ${0}`:usage: [makeall] | [clean] | [insmod] | [rmmod] | [updatemod]" 
 	  exit 1
 	  ;; 
 esac
