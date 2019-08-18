@@ -6,10 +6,19 @@
 #include <string.h>
 #include "../libs/linber_service_api.h"
 
-#define PERIOD	100
+#define DEFAULT_PERIOD	1000000	// 1 second in microseconds
+
 
 int main(int argc,char* argv[]){
+	unsigned int period = DEFAULT_PERIOD;
 	system_status system;
+	if(argc >= 2){
+		int n = atoi(argv[1]);
+		if(n > 0){
+			period = n * 1000;	// input in milliseconds
+		}
+	}
+
 	system.services = malloc(MAX_SERVICES * sizeof(service_status));
 	for(int i = 0; i< MAX_SERVICES; i++){
 		system.services[i].uri = malloc(MAX_URI_LEN);
@@ -17,7 +26,7 @@ int main(int argc,char* argv[]){
 
 	linber_init();
 	while(1){
-		usleep(PERIOD);
+		usleep(period);
 		linber_system_status(&system);
 		int num_services = system.services_count;
 		int num_concurent_workers = system.max_concurrent_workers;
