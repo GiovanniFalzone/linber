@@ -30,7 +30,7 @@
 typedef struct linber_service_struct {
 	char *service_uri;
 	unsigned int service_uri_len;
-	union params{
+	union linber_params{
 		struct registration {
 			unsigned int exec_time;
 			unsigned int max_concurrent_workers;
@@ -47,26 +47,28 @@ typedef struct linber_service_struct {
 
 		struct request {
 			unsigned int rel_deadline;
-			char *params;
-			int params_len;
+			char *service_params;
+			int service_params_len;
+			char *ptr_service_result;
+			int *ptr_service_result_len;
 		} request;
 
 		struct start_job{
 			unsigned int worker_id;	// start job
 			unsigned long service_token;
-			unsigned int *ret_slot_id;
-			char *ret_args;
-			int ret_args_len;
+			unsigned int *ptr_slot_id;
+			char *ptr_service_params;
+			int *ptr_service_params_len;
 		} start_job;
 
 		struct end_job{
 			unsigned int worker_id;
 			unsigned long service_token;
 			unsigned int slot_id;
-			char *ret_result;
-			int ret_result_len;
+			char *service_result;
+			int service_result_len;
 		} end_job;
-	} service_params;
+	} linber_params;
 } linber_service_struct;
 
 typedef struct service_status{

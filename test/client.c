@@ -20,18 +20,22 @@ typedef struct{
 
 
 void *thread_job(void *args){
+	char *service_params = "ciao\0";
+	int service_params_len = strlen(service_params) + 1;
+	char *service_result = malloc(64);
+	int service_result_len;
 	thread_info worker = *(thread_info*)args;
 	struct timeval start, end;
 	unsigned long passed_millis = 0;
 	printf("sending request id:%d, service:%s\n", worker.id, worker.service_uri);
 	gettimeofday(&start, NULL);
-	int ret = linber_request_service(worker.service_uri, worker.uri_len, REL_DEADLINE);
+	int ret = linber_request_service(worker.service_uri, worker.uri_len, REL_DEADLINE, service_params, service_params_len, service_result, &service_result_len);
 	if(ret == LINBER_ABORT_REQUEST){
 		printf("request aborted\n");
 	} else {
 		gettimeofday(&end, NULL);
 		passed_millis = (end.tv_sec - start.tv_sec) * 1000 + (end.tv_usec - start.tv_usec) / 1000;
-		printf("Request %d served in %lu ms\n", worker.id, passed_millis);
+		printf("Request %d Response: %d %s served in %lu ms\n", worker.id, service_result_len, service_result, passed_millis);
 	}
 	return NULL;
 }
