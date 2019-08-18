@@ -4,10 +4,10 @@ Linber API uses IOCTL to comunicate with the Linber module through the file /dev
 
 ## Create Service
 **Input:** \
-	* **service uri** to identify the service	
-	* **uri len**		string length of the uri
-	* **exec time**	time needed to compute the service
-	* **max workers**	maximum number of workers working on parallel requests
+	* Item **service uri** to identify the service	
+	* Item **uri len**		string length of the uri
+	* Item **exec time**	time needed to compute the service
+	* Item **max workers**	maximum number of workers working on parallel requests
 **Output:** \
 	**service token** 64 bit assigned by the module to check the other requests
 
