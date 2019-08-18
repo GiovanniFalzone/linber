@@ -388,6 +388,7 @@ static int linber_request_service(linber_service_struct *obj){
 			return -1;
 		}
 	
+		service_load_balancing(ser_node);
 		req_node = insert_request(ser_node, service_params, service_params_len);
 
 		// request completed or aborted
@@ -497,7 +498,6 @@ static int linber_End_Job(linber_service_struct *obj){
 				return LINBER_KILL_WORKER;
 			}
 		}
-		service_load_balancing(ser_node);
 	}
 	return 0;
 }
