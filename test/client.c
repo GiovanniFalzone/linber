@@ -5,6 +5,7 @@
 #include <pthread.h>
 #include <string.h>
 #include "../libs/linber_service_api.h"
+#include <sys/time.h>
 
 #define DEFAULT_SERVICE_URI	"org.service\0"
 #define REL_DEADLINE		10
@@ -20,12 +21,18 @@ typedef struct{
 
 void *thread_job(void *args){
 	thread_info worker = *(thread_info*)args;
+	struct timeval start, end;
+	unsigned long passed_millis = 0;
 	printf("sending request id:%d, service:%s\n", worker.id, worker.service_uri);
+	gettimeofday(&start, NULL);
 	int ret = linber_request_service(worker.service_uri, worker.uri_len, REL_DEADLINE);
 	if(ret == LINBER_ABORT_REQUEST){
 		printf("request aborted\n");
+	} else {
+		gettimeofday(&end, NULL);
+		passed_millis = (end.tv_sec - start.tv_sec) * 1000 + (end.tv_usec - start.tv_usec) / 1000;
+		printf("Request %d served in %lu ms\n", worker.id, passed_millis);
 	}
-
 	return NULL;
 }
 

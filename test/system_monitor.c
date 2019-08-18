@@ -23,11 +23,21 @@ int main(int argc,char* argv[]){
 		int num_concurent_workers = system.max_concurrent_workers;
 		int num_requests = system.requests_count;
 		int serving_count = system.serving_requests_count;
+		int load = 0;
+		if(serving_count >0 && num_concurent_workers >0){
+			load = ((serving_count*100) / num_concurent_workers);
+		}
 		printf("---------------------\n");
-		printf("Services: %d, Max Concurrent Workers: %d, Requests: %d Serving: %d\n", num_services, num_concurent_workers, num_requests, serving_count);
+		printf("Linber: Services: %d, Max Concurrent Workers: %d, Requests: %d Serving: %d, Load: %d\n", \
+						num_services, num_concurent_workers, num_requests, serving_count, load);
 		for(int i = 0; i< num_services; i++){
 			service_status service = system.services[i];
-			printf("Service %s, ExecTime: %d, Max Concurrent Workers %d Requests:%d, Serving: %d, Serving time:%d\n", service.uri, service.exec_time, service.max_concurrent_workers, service.requests_count, service.serving_requests_count, service.serving_time);
+			load = 0;
+			if(service.serving_requests_count >0 && service.max_concurrent_workers >0){
+				load = ((serving_count*100) / num_concurent_workers);
+			}
+			printf("Service %s, ExecTime: %d, Max Concurrent Workers %d Requests:%d, Serving: %d, Serving time:%d, Load: %d\n", \
+					service.uri, service.exec_time, service.max_concurrent_workers, service.requests_count, service.serving_requests_count, service.serving_time, load);
 		}
 	}
 	linber_exit();

@@ -44,7 +44,6 @@ static ssize_t	dev_write(struct file *f, const char *buf, size_t sz, loff_t *off
 //------------------------------------------------------
 typedef struct RequestNode{
 	struct list_head list;
-	int id;
 	struct semaphore Request_sem;
 	int cmd;
 	char *ret;
@@ -62,6 +61,7 @@ struct ServingRequests{
 	struct mutex Serving_mutex;
 	unsigned int num_active_slots;
 	unsigned int max_slots;
+	unsigned int balanced_slots;
 	unsigned int serving_count;
 };
 
@@ -95,10 +95,9 @@ static int initialize_queue(struct list_head *head){
 	return 0;
 }
 
-static RequestNode *Enqueue_Request(struct list_head *head, int id){
+static RequestNode *Enqueue_Request(struct list_head *head){
 	RequestNode *req_node;
 	req_node = kmalloc(sizeof(*req_node) ,GFP_KERNEL);
-	req_node->id = id;
 	req_node->cmd = LINBER_ABORT_REQUEST;	// if not fixed will be aborted
 	sema_init(&req_node->Request_sem, 0);
 	list_add_tail(&req_node->list, head);
@@ -192,7 +191,8 @@ static ServiceNode * linber_create_service(linber_service_struct *obj){
 	node->destroy_me = 0;
 	node->Serving_requests.serving_count = 0;
 	node->Serving_requests.max_slots = node->max_concurrent_workers;
-	node->Serving_requests.num_active_slots = (node->Serving_requests.max_slots + 1)>>1;	// divided by 2
+	node->Serving_requests.balanced_slots = (node->Serving_requests.max_slots + 1)>>1;	// divided by 2
+	node->Serving_requests.num_active_slots = node->Serving_requests.balanced_slots;
 	node->Serving_requests.Serving_slots_arr = kmalloc(node->Serving_requests.max_slots*sizeof(request_slot), GFP_KERNEL);
 	for(i=0; i<node->Serving_requests.max_slots; i++){
 		mutex_init(&node->Serving_requests.Serving_slots_arr[i].slot_mutex);
@@ -210,6 +210,152 @@ static ServiceNode * linber_create_service(linber_service_struct *obj){
 	return node;
 }
 
+static RequestNode* insert_request(ServiceNode *ser_node){
+	RequestNode *req_node;
+	mutex_lock(&ser_node->service_mutex);
+		req_node = Enqueue_Request(&ser_node->RequestsHead);
+		ser_node->num_requests++;
+		if(ser_node->num_requests > ser_node->Serving_requests.num_active_slots){
+			ser_node->Serving_requests.num_active_slots++;
+			if(ser_node->Serving_requests.num_active_slots > ser_node->Serving_requests.max_slots){
+				ser_node->Serving_requests.num_active_slots = ser_node->Serving_requests.max_slots;
+			}
+		} else {
+			ser_node->Serving_requests.num_active_slots--;
+			if(ser_node->Serving_requests.num_active_slots < ser_node->Serving_requests.balanced_slots){
+				ser_node->Serving_requests.num_active_slots = ser_node->Serving_requests.balanced_slots;
+			}
+		}
+		ser_node->serving_time += ser_node->exec_time;
+		up(&ser_node->Workers_sem);
+	mutex_unlock(&ser_node->service_mutex);
+	mutex_lock(&System_mutex);
+		system_requests_count++;
+	mutex_unlock(&System_mutex);
+	down_interruptible(&req_node->Request_sem);
+	return req_node;
+
+}
+
+static RequestNode* get_request(ServiceNode* ser_node){
+	RequestNode* req_node = NULL;
+	mutex_lock(&ser_node->service_mutex);
+		req_node = Dequeue_Request(&ser_node->RequestsHead);
+		if(req_node != NULL){
+			ser_node->num_requests--;
+			ser_node->serving_time -= ser_node->exec_time;
+		}
+	if(req_node == NULL){
+		printk(KERN_INFO "linber:: No pending request for service: %s\n", ser_node->uri);
+	}
+	mutex_unlock(&ser_node->service_mutex);
+	return req_node;
+}
+
+static request_slot* get_slot_by_id(ServiceNode *ser_node, unsigned int slot_id){
+	request_slot *slot = NULL;
+	if(slot_id >=0 && slot_id < ser_node->Serving_requests.max_slots){
+		slot = &(ser_node->Serving_requests.Serving_slots_arr[slot_id]);;
+	} else {
+		printk(KERN_INFO "linber:: Wrong slot id %d for service: %s\n", slot_id, ser_node->uri);
+	}
+	return slot;
+}
+
+static unsigned int get_slot(ServiceNode *ser_node, unsigned int worker_id, request_slot **slot){
+	unsigned int slot_id = 0;
+	slot_id = worker_id % (ser_node->Serving_requests.num_active_slots);
+	*slot = &(ser_node->Serving_requests.Serving_slots_arr[slot_id]);
+	return slot_id;
+}
+
+static inline void decrease_worker(ServiceNode *ser_node){
+	mutex_lock(&ser_node->service_mutex);
+	ser_node->count_workers--;
+	mutex_unlock(&ser_node->service_mutex);
+}
+
+
+static int Service_check_Worker(ServiceNode *ser_node, unsigned long service_token, int worker_id){
+	if((ser_node->token == service_token) && (worker_id >= 0)){
+		return 1;
+	}
+	printk(KERN_INFO "linber:: Wrong service id %lu or worker id %d for service: %s\n", service_token, worker_id, ser_node->uri);
+	return 0;
+}
+
+static int Service_check_alive(ServiceNode *ser_node){
+	mutex_lock(&ser_node->service_mutex);
+		if(ser_node->destroy_me == 1){	// check if must be destroied
+			ser_node->count_workers--;
+			if(ser_node->count_workers <= 0){
+				system_services_count--;
+				list_del(&ser_node->list);
+				kfree(ser_node->uri);
+				system_max_concurrent_workers -= ser_node->max_concurrent_workers;
+				kfree(ser_node->Serving_requests.Serving_slots_arr);
+				mutex_unlock(&ser_node->service_mutex);
+				kfree(ser_node);	// done by last worker
+				printk(KERN_INFO "linber:: Service destroyied\n");
+				return -1;
+			} else {
+				mutex_unlock(&ser_node->service_mutex);
+				return -1;
+			}
+		}
+	mutex_unlock(&ser_node->service_mutex);
+	return 0;
+}
+
+static int get_and_load_request_to_slot(ServiceNode *ser_node, RequestNode **req_node_ptr, request_slot **slot_ptr, unsigned int *slot_id, unsigned int worker_id){
+	request_slot *slot;
+	RequestNode *req_node;
+	down_interruptible(&ser_node->Workers_sem);		// wait for request
+
+	if(Service_check_alive(ser_node) < 0){
+		return -1;
+	}
+
+	*slot_id = get_slot(ser_node, worker_id, &slot);
+	*slot_ptr = slot;
+	mutex_lock(&slot->slot_mutex);	// block until it is sure that can execute the request
+	req_node = get_request(ser_node);
+	*req_node_ptr = req_node;
+	if(req_node != NULL){
+		slot->request = req_node;
+		mutex_lock(&ser_node->Serving_requests.Serving_mutex);
+			ser_node->Serving_requests.serving_count++;
+		mutex_unlock(&ser_node->Serving_requests.Serving_mutex);
+		mutex_lock(&System_mutex);
+			system_requests_count--;
+			system_serving_requests_count++;
+		mutex_unlock(&System_mutex);
+	}
+	return 0;
+}
+
+static void unload_slot_and_get_request(ServiceNode *ser_node, RequestNode **req_node_ptr, request_slot **slot_ptr, unsigned int slot_id){
+	RequestNode *req_node;
+	request_slot *slot;
+	slot = get_slot_by_id(ser_node, slot_id);
+	*slot_ptr = slot;
+	if(slot != NULL){
+		req_node = slot->request;
+		*req_node_ptr = req_node;
+		if(req_node != NULL){
+			slot->request = NULL;
+			mutex_lock(&ser_node->Serving_requests.Serving_mutex);
+				ser_node->Serving_requests.serving_count--;
+			mutex_unlock(&ser_node->Serving_requests.Serving_mutex);
+			mutex_lock(&System_mutex);
+				system_serving_requests_count--;
+			mutex_unlock(&System_mutex);
+			mutex_unlock(&slot->slot_mutex);	// release slot
+		}
+	}
+}
+
+
 //------------------------------------------------------
 static int linber_register_service(linber_service_struct *obj){
 	ServiceNode *ser_node;
@@ -226,21 +372,11 @@ static int linber_register_service(linber_service_struct *obj){
 
 static int linber_request_service(linber_service_struct *obj){
 	int ret = 0;
-	static int id = 0;
 	RequestNode *req_node;
 	ServiceNode *ser_node;
 	ser_node = findService(obj->service_uri);
 	if(ser_node != NULL && (ser_node->destroy_me == 0)){
-		mutex_lock(&ser_node->service_mutex);
-			req_node = Enqueue_Request(&ser_node->RequestsHead, id++);
-			ser_node->num_requests++;
-			ser_node->serving_time += ser_node->exec_time;
-			up(&ser_node->Workers_sem);
-		mutex_unlock(&ser_node->service_mutex);
-		mutex_lock(&System_mutex);
-			system_requests_count++;
-		mutex_unlock(&System_mutex);
-		down_interruptible(&req_node->Request_sem);
+		req_node = insert_request(ser_node);
 		// request completed or aborted
 		ret = req_node->cmd;
 		if(ret != LINBER_ABORT_REQUEST){
@@ -268,31 +404,6 @@ static int linber_register_service_worker(linber_service_struct *obj){
 	return 0;
 }
 
-static int linber_service_Worker_check_id(ServiceNode *ser_node, unsigned long service_token, int worker_id){
-	if((ser_node->token == service_token) && (worker_id >= 0)){
-		return 1;
-	}
-	printk(KERN_INFO "linber:: Wrong service id %lu or worker id %d for service: %s\n", service_token, worker_id, ser_node->uri);
-	return 0;
-}
-
-static request_slot* get_slot_by_id(ServiceNode *ser_node, unsigned int slot_id){
-	request_slot *slot = NULL;
-	if(slot_id >=0 && slot_id < ser_node->Serving_requests.max_slots){
-		slot = &(ser_node->Serving_requests.Serving_slots_arr[slot_id]);;
-	} else {
-		printk(KERN_INFO "linber:: Wrong slot id %d for service: %s\n", slot_id, ser_node->uri);
-	}
-	return slot;
-}
-
-static unsigned int get_slot(ServiceNode *ser_node, unsigned int worker_id, request_slot **slot){
-	unsigned int slot_id = 0;
-	slot_id = worker_id % (ser_node->Serving_requests.num_active_slots);
-	*slot = &(ser_node->Serving_requests.Serving_slots_arr[slot_id]);
-	return slot_id;
-}
-
 static int linber_Start_Job(linber_service_struct *obj){
 	request_slot *slot;
 	RequestNode *req_node;
@@ -303,103 +414,57 @@ static int linber_Start_Job(linber_service_struct *obj){
 		// check arguments
 		worker_id = obj->service_params.start_job.worker_id;
 		service_token = obj->service_params.start_job.service_token;
-		if(!linber_service_Worker_check_id(ser_node, service_token, worker_id)){
+		if(!Service_check_Worker(ser_node, service_token, worker_id)){
+			decrease_worker(ser_node);
 			return LINBER_KILL_WORKER;
 		}
-
-		down_interruptible(&ser_node->Workers_sem);		// wait for request
-		mutex_lock(&ser_node->service_mutex);
-			if(ser_node->destroy_me == 1){	// check if must e destroyied
-				ser_node->count_workers--;
-				if(ser_node->count_workers <= 0){
-					system_services_count--;
-					list_del(&ser_node->list);
-					kfree(ser_node->uri);
-					system_max_concurrent_workers -= ser_node->max_concurrent_workers;
-					kfree(ser_node->Serving_requests.Serving_slots_arr);
-					mutex_unlock(&ser_node->service_mutex);
-					kfree(ser_node);	// done by last worker
-					printk(KERN_INFO "linber:: Service destroyied\n");
-				} else {
-					mutex_unlock(&ser_node->service_mutex);
-				}
-				return LINBER_KILL_WORKER;
-			}
-		mutex_unlock(&ser_node->service_mutex);
-
-		slot_id = get_slot(ser_node, worker_id, &slot);
-		mutex_lock(&slot->slot_mutex);	// block until it ir sure that can execute the request
-			mutex_lock(&ser_node->service_mutex);
-				req_node = Dequeue_Request(&ser_node->RequestsHead);
-				if(req_node != NULL){
-					ser_node->num_requests--;
-					ser_node->serving_time -= ser_node->exec_time;
-				}
-			mutex_unlock(&ser_node->service_mutex);
-
-			if(req_node == NULL){
-				printk(KERN_INFO "linber:: No pending request for service: %s\n", obj->service_uri);
-				mutex_unlock(&slot->slot_mutex);	// release slot
-				return LINBER_SKIP_JOB;
-			} else {
-				slot->request = req_node;
-				mutex_lock(&ser_node->Serving_requests.Serving_mutex);
-					ser_node->Serving_requests.serving_count++;
-				mutex_unlock(&ser_node->Serving_requests.Serving_mutex);
-
-				mutex_lock(&System_mutex);
-					system_requests_count--;
-					system_serving_requests_count++;
-				mutex_unlock(&System_mutex);
-
-				// pass parameters to worker and exec job
-				copy_to_user(obj->service_params.start_job.ret_slot_id, &slot_id, sizeof(slot_id));
-			}
+		if(get_and_load_request_to_slot(ser_node, &req_node, &slot, &slot_id, worker_id) < 0){
+			return LINBER_KILL_WORKER;
+		}
+		if(req_node == NULL){
+			mutex_unlock(&slot->slot_mutex);	// release slot
+			return LINBER_SKIP_JOB;
+		} else {
+			// pass parameters to worker and exec job
+			copy_to_user(obj->service_params.start_job.ret_slot_id, &slot_id, sizeof(slot_id));
+		}
 	} else {
 		printk(KERN_INFO "linber::Start Job  Service:%s does not exists\n", obj->service_uri);
+		decrease_worker(ser_node);
 		return LINBER_KILL_WORKER;
 	}
 	return 0;
 }
 
-	// find request in serving_requests
-	// copy ret to client userspace
-	// wake up client
-	// destroy request structure
 static int linber_End_Job(linber_service_struct *obj){
+	int worker_id, slot_id;
+	unsigned long service_token;
 	request_slot *slot;
 	RequestNode *req_node;
 	ServiceNode *ser_node = findService(obj->service_uri);
-	int worker_id, slot_id;
-	unsigned long service_token;
+
 	if(ser_node != NULL){
 		worker_id = obj->service_params.end_job.worker_id;
 		service_token = obj->service_params.end_job.service_token;
 		slot_id = obj->service_params.end_job.slot_id;
-		if(!linber_service_Worker_check_id(ser_node, service_token, worker_id)){
+		if(!Service_check_Worker(ser_node, service_token, worker_id)){
+			decrease_worker(ser_node);
 			return LINBER_KILL_WORKER;
 		} else {
-			slot = get_slot_by_id(ser_node,slot_id);
+			unload_slot_and_get_request(ser_node, &req_node, &slot, slot_id);
 			if(slot != NULL){
-				req_node = slot->request;
 				if(req_node != NULL){
-					slot->request = NULL;
-					mutex_lock(&ser_node->Serving_requests.Serving_mutex);
-						ser_node->Serving_requests.serving_count--;
-					mutex_unlock(&ser_node->Serving_requests.Serving_mutex);
-					mutex_lock(&System_mutex);
-						system_serving_requests_count--;
-					mutex_unlock(&System_mutex);
 					req_node->cmd = LINBER_SUCCESS_REQUEST;
-
 					// copy service return in the request ret
-
 					up(&req_node->Request_sem);	// end job
-					mutex_unlock(&slot->slot_mutex);	// release slot
 				} else {
 					printk(KERN_INFO "linber:: End job spourious job %s\n", obj->service_uri);
 					return LINBER_SKIP_JOB;
 				}
+			} else {
+				printk(KERN_INFO "linber:: get slot error on parameters for %s\n", obj->service_uri);
+				decrease_worker(ser_node);
+				return LINBER_KILL_WORKER;
 			}
 		}
 	}
@@ -410,7 +475,7 @@ static int linber_destroy_service(linber_service_struct *obj){
 	ServiceNode *node;
 	node = findService(obj->service_uri);
 	if(node != NULL){
-		if(linber_service_Worker_check_id(node, obj->service_params.destroy_service.service_token, 0)){
+		if(Service_check_Worker(node, obj->service_params.destroy_service.service_token, 0)){
 			printk(KERN_INFO "linber:: destroying service %s\n", obj->service_uri);
 			destroy_service(node);
 			return 0;
@@ -435,6 +500,7 @@ static int linber_get_system_status(void* system_user){
 		mutex_lock(&System_mutex);
 		list_for_each_entry(ser_node, &ServicesHead, list){
 			if(i < system_services_count){
+				mutex_lock(&ser_node->service_mutex);
 				services[i].uri_len = strlen(ser_node->uri);
 				copy_to_user(services[i].uri, ser_node->uri, services[i].uri_len);
 				services[i].exec_time = ser_node->exec_time;
@@ -443,11 +509,12 @@ static int linber_get_system_status(void* system_user){
 				services[i].serving_requests_count = ser_node->Serving_requests.serving_count;
 				services[i].serving_time = 0;
 				if(ser_node->serving_time > 0 && ser_node->Serving_requests.num_active_slots > 0){
-					services[i].serving_time = ser_node->exec_time + ser_node->serving_time / ser_node->Serving_requests.num_active_slots;
+					services[i].serving_time = ser_node->exec_time + (ser_node->serving_time / ser_node->Serving_requests.num_active_slots);
 					if(services[i].serving_time > services[i].exec_time){
 						services[i].serving_time = services[i].serving_time - (services[i].serving_time)%services[i].exec_time;
 					}
 				}
+				mutex_unlock(&ser_node->service_mutex);
 			}
 			i++;
 		}
@@ -591,3 +658,5 @@ void cleanup_module(void) {
 }
 
 MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Giovanni Falzone");
+MODULE_DESCRIPTION("");

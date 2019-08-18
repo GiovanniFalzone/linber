@@ -13,7 +13,6 @@
 #define IOCTL_START_JOB_SERVICE			_IOW(MAJOR_NUM, 3, char*)
 #define IOCTL_END_JOB_SERVICE			_IOW(MAJOR_NUM, 4, char*)
 #define IOCTL_DESTROY_SERVICE			_IOW(MAJOR_NUM, 5, char*)
-
 #define IOCTL_SYSTEM_STATUS				_IOW(MAJOR_NUM, 6, char*)
 
 
