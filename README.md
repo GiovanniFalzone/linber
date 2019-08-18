@@ -1,19 +1,23 @@
-# linber
-Linber is a RPC mechanism implemented as driver module in the linux kernel. 					\
+# Linber
+Linber is a RPC mechanism implemented as driver module in the linux kernel. It allow to register a service with its workers and then start requesting the service on demand just passing its service uri. \
 Linber API uses IOCTL to comunicate with the Linber module through the file /dev/linber 		\
 
 ## Create Service
-- **Input:**
-	- **service uri** to identify the service	
-	- **uri len**		string length of the uri
-	- **exec time**	time needed to compute the service
-	- **max workers**	maximum number of workers working on parallel requests
-- **Output:**
-	**service token** 64 bit assigned by the module to check the other requests
+- ***Input:***
+	- *service uri* to identify the service	
+	- *uri len*		string length of the uri
+	- *exec time*	time needed to compute the service
+	- *max workers*	maximum number of workers working on parallel requests
+- ***Output:***
+	- *service token* 64 bit assigned by the module to check the other requests
 
 ## Register Worker
-- **Input:**
-- **Output:**
+linber_register_service_worker(char * service_uri, unsigned int uri_len, unsigned int * worker_id)
+- ***Input:***
+	- *service uri*
+	- *uri len*
+- ***Output:***
+	- *worker id*
 
 ## Worker Start Job
 - **Input:**
