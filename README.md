@@ -1,27 +1,27 @@
 # linber
-Linber is a RPC mechanism implemented as driver module in the linux kernel.
-Linber API uses IOCTL to comunicate with the Linber module through the file /dev/linber
+Linber is a RPC mechanism implemented as driver module in the linux kernel. 					\
+Linber API uses IOCTL to comunicate with the Linber module through the file /dev/linber 		\
 
-## Create Service\
-Input:\
-	**service uri** to identify the service\
-	**uri len**		string length of the uri\
-	**exec time**	time needed to compute the service\
-	**max workers**	maximum number of workers working on parallel requests\
-Output:\
-	**service token** 64 bit assigned by the module to check the other requests\
+## Create Service
+**Input:** \
+	* **service uri** to identify the service	
+	* **uri len**		string length of the uri
+	* **exec time**	time needed to compute the service
+	* **max workers**	maximum number of workers working on parallel requests
+**Output:** \
+	**service token** 64 bit assigned by the module to check the other requests
 
-## Register Worker\
+## Register Worker
 
-## Worker Start Job\
+## Worker Start Job
 
-## Worker End Job\
+## Worker End Job
 
-## Destroy Service\
+## Destroy Service
 
-## Request Service\
+## Request Service
 
-### Info and howto\
+### Info and howto
 Distro: Ubuntu 7.4.0-1ubuntu1~18.04.1\
 Kernel version: 5.0.0-23-generic\
 gcc version 7.4.0\
