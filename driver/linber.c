@@ -366,7 +366,7 @@ static int linber_register_service(linber_service_struct *obj){
 	ser_node = findService(obj->service_uri);
 	if(ser_node == NULL){
 		ser_node = linber_create_service(obj);
-		copy_to_user(obj->linber_params.registration.ret_service_token, &ser_node->token, sizeof(ser_node->token));
+		put_user(ser_node->token, obj->linber_params.registration.ret_service_token);
 	} else {
 		printk(KERN_INFO "linber:: Service:%s already exists\n", obj->service_uri);
 	}
@@ -390,7 +390,7 @@ static int linber_request_service(linber_service_struct *obj){
 		// request completed or aborted
 		ret = req_node->cmd;
 		if(ret == LINBER_SUCCESS_REQUEST){
-			copy_to_user(obj->linber_params.request.ptr_service_result_len, &req_node->service_result_len, sizeof(req_node->service_result_len));
+			put_user(req_node->service_result_len, obj->linber_params.request.ptr_service_result_len);
 			copy_to_user(obj->linber_params.request.ptr_service_result, req_node->service_result, req_node->service_result_len);
 		}
 
@@ -412,7 +412,7 @@ static int linber_register_service_worker(linber_service_struct *obj){
 		mutex_lock(&ser_node->service_mutex);
 			ser_node->count_workers++;
 			worker_id = ser_node->next_worker_id++;
-			copy_to_user(obj->linber_params.register_worker.ret_worker_id, &worker_id, sizeof(worker_id));
+			put_user(worker_id, obj->linber_params.register_worker.ret_worker_id);
 		mutex_unlock(&ser_node->service_mutex);
 	}
 	return 0;
@@ -440,9 +440,9 @@ static int linber_Start_Job(linber_service_struct *obj){
 			return LINBER_SKIP_JOB;
 		} else {
 			// pass parameters to worker and exec job
-			copy_to_user(obj->linber_params.start_job.ptr_slot_id, &slot_id, sizeof(slot_id));
+			put_user(slot_id, obj->linber_params.start_job.ptr_slot_id);
+			put_user(req_node->service_params_len, obj->linber_params.start_job.ptr_service_params_len);
 			copy_to_user(obj->linber_params.start_job.ptr_service_params, req_node->service_params, req_node->service_params_len);
-			copy_to_user(obj->linber_params.start_job.ptr_service_params_len, &req_node->service_params_len, sizeof(req_node->service_params_len));
 		}
 	} else {
 		printk(KERN_INFO "linber::Start Job  Service:%s does not exists\n", obj->service_uri);
