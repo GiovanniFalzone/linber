@@ -383,15 +383,21 @@ static int linber_request_service(linber_service_struct *obj){
 	if(ser_node != NULL && (ser_node->destroy_me == 0)){
 		service_params_len = obj->linber_params.request.service_params_len;
 		service_params = kmalloc(service_params_len, GFP_KERNEL);
-		copy_from_user(service_params, obj->linber_params.request.service_params, service_params_len);
+		if(copy_from_user(service_params, obj->linber_params.request.service_params, service_params_len) < 0){
+			return -1;
+		}
 	
 		req_node = insert_request(ser_node, service_params, service_params_len);
 
 		// request completed or aborted
 		ret = req_node->cmd;
 		if(ret == LINBER_SUCCESS_REQUEST){
-			put_user(req_node->service_result_len, obj->linber_params.request.ptr_service_result_len);
-			copy_to_user(obj->linber_params.request.ptr_service_result, req_node->service_result, req_node->service_result_len);
+			if(put_user(req_node->service_result_len, obj->linber_params.request.ptr_service_result_len) != 0){
+				ret = -1;
+			}
+			if(copy_to_user(obj->linber_params.request.ptr_service_result, req_node->service_result, req_node->service_result_len) != 0){
+				ret = -1;
+			}
 		}
 
 		kfree(req_node->service_params);
