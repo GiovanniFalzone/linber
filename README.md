@@ -6,8 +6,8 @@ Each worker is waiting on the server semaphore, when a request arrive is insert 
 
 ##Requests burst management
 At the beginning when there are no request, the service has a number of available slots equal to one and just one worker can execute the request.
-When a request arrive and is inserted in the FIFO queue, the module check the number of waiting requests, if there are more requests then active slots, the number of actives slots is increased until reaching the maximum level of parallelism defined during the seservice's registration.
-If the number of request is less then the nuber of active slots the latter are reduces until one.
+Whenever a request arrive the module checks the number of requests in the FIFO queue if there are more requests then active slots the letter are incremented by one up to the maximum parallelism level.
+In this way each service autobalance the number of workers in function of the number of waiting requests
 
 ## Linber API
 ### Create Service
