@@ -21,11 +21,14 @@
 
 #define SERVICE_URI_MAX_LEN		50
 
+#define LINBER_REQUEST_ACCEPTED 	1
+
 #define LINBER_ABORT_REQUEST	-1
 #define LINBER_SUCCESS_REQUEST	0
 
 #define LINBER_SKIP_JOB			1
 #define LINBER_KILL_WORKER		-1
+
 
 typedef struct linber_service_struct {
 	char *service_uri;

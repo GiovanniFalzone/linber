@@ -6,10 +6,13 @@
 #include <string.h>
 #include "../libs/linber_service_api.h"
 #include <sys/time.h>
+#include <signal.h>
+
 
 #define DEFAULT_SERVICE_URI	"org.service\0"
 #define REL_DEADLINE		10
 #define DEFAULT_CONCURRENT_REQUESTS	10
+#define DEFAULT_MAX_INTER_PERIOD	100
 
 typedef struct{
 	pthread_t tid;
@@ -18,6 +21,14 @@ typedef struct{
 	int uri_len;
 } thread_info;
 
+int abort_request = 0;
+
+void sig_handler(int signo){
+  if (signo == SIGINT){
+    printf("received SIGINT\n");
+	abort_request = 1;
+  }
+}
 
 void *thread_job(void *args){
 	char *service_params = "ciao\0";
@@ -27,15 +38,17 @@ void *thread_job(void *args){
 	thread_info worker = *(thread_info*)args;
 	struct timeval start, end;
 	unsigned long passed_millis = 0;
-	printf("sending request id:%d, service:%s\n", worker.id, worker.service_uri);
-	gettimeofday(&start, NULL);
-	int ret = linber_request_service(worker.service_uri, worker.uri_len, REL_DEADLINE, service_params, service_params_len, service_result, &service_result_len);
-	if(ret == LINBER_ABORT_REQUEST){
-		printf("request aborted\n");
-	} else {
-		gettimeofday(&end, NULL);
-		passed_millis = (end.tv_sec - start.tv_sec) * 1000 + (end.tv_usec - start.tv_usec) / 1000;
-		printf("Request %d Response: %d %s served in %lu ms\n", worker.id, service_result_len, service_result, passed_millis);
+	if(abort_request == 0){
+		printf("sending request id:%d, service:%s\n", worker.id, worker.service_uri);
+		gettimeofday(&start, NULL);
+		int ret = linber_request_service(worker.service_uri, worker.uri_len, REL_DEADLINE, service_params, service_params_len, service_result, &service_result_len);
+		if(ret == LINBER_ABORT_REQUEST){
+			printf("request aborted\n");
+		} else {
+			gettimeofday(&end, NULL);
+			passed_millis = (end.tv_sec - start.tv_sec) * 1000 + (end.tv_usec - start.tv_usec) / 1000;
+			printf("Request %d Response: %d %s served in %lu ms\n", worker.id, service_result_len, service_result, passed_millis);
+		}
 	}
 	return NULL;
 }
@@ -45,7 +58,7 @@ int main(int argc,char* argv[]){
 	char *service_uri = DEFAULT_SERVICE_URI;
 	int uri_len = strlen(service_uri);
 	int concurrent_requests = DEFAULT_CONCURRENT_REQUESTS;
-	int max_inter_request;
+	int max_inter_request = DEFAULT_MAX_INTER_PERIOD;
 	if(argc >= 2){
 		service_uri = malloc(strlen(argv[1])+1);
 		strcpy(service_uri, argv[1]);
