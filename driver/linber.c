@@ -382,10 +382,10 @@ static int linber_register_service(linber_service_struct *obj){
 	if(ser_node == NULL){
 		ser_node = linber_create_service(obj);
 		put_user(ser_node->token, obj->linber_params.registration.ret_service_token);
+		return LINBER_SERVICE_REGISTRATION_SUCCESS;
 	} else {
-		printk(KERN_INFO "linber:: Service:%s already exists\n", obj->service_uri);
+		return LINBER_SERVICE_REGISTRATION_ALREADY_EXISTS;
 	}
-	return 0;
 }
 
 static int linber_request_service(linber_service_struct *obj){
@@ -407,12 +407,12 @@ static int linber_request_service(linber_service_struct *obj){
 
 		// request completed or aborted
 		ret = req_node->result_cmd;
-		if(ret == LINBER_SUCCESS_REQUEST){
+		if(ret == LINBER_REQUEST_SUCCESS){
 			if(put_user(req_node->service_result_len, obj->linber_params.request.ptr_service_result_len) != 0){
-				ret = -1;
+				ret = LINBER_REQUEST_FAILED;
 			}
 			if(copy_to_user(obj->linber_params.request.ptr_service_result, req_node->service_result, req_node->service_result_len) != 0){
-				ret = -1;
+				ret = LINBER_REQUEST_FAILED;
 			}
 		}
 
@@ -420,8 +420,7 @@ static int linber_request_service(linber_service_struct *obj){
 		kfree(req_node->service_result);
 		kfree(req_node);
 	} else {
-		printk(KERN_INFO "linber:: Request Service:%s does not exists\n", obj->service_uri);
-		ret = LINBER_ABORT_REQUEST;
+		ret = LINBER_SERVICE_NOT_EXISTS;
 	}
 	return ret;
 }
@@ -462,7 +461,7 @@ static int linber_Start_Job(linber_service_struct *obj){
 		}
 		if(req_node == NULL){
 			mutex_unlock(&slot->slot_mutex);	// release slot
-			return LINBER_SKIP_JOB;
+			return LINBER_SERVICE_SKIP_JOB;
 		} else {
 			// pass parameters to worker and exec job
 			put_user(slot_id, obj->linber_params.start_job.ptr_slot_id);
@@ -470,9 +469,8 @@ static int linber_Start_Job(linber_service_struct *obj){
 			copy_to_user(obj->linber_params.start_job.ptr_service_params, req_node->service_params, req_node->service_params_len);
 		}
 	} else {
-		printk(KERN_INFO "linber::Start Job  Service:%s does not exists\n", obj->service_uri);
 		decrease_workers(ser_node);
-		return LINBER_KILL_WORKER;
+		return LINBER_SERVICE_NOT_EXISTS;
 	}
 	return 0;
 }
@@ -495,7 +493,7 @@ static int linber_End_Job(linber_service_struct *obj){
 			unload_slot_and_get_request(ser_node, &req_node, &slot, slot_id);
 			if(slot != NULL){
 				if(req_node != NULL){
-					req_node->result_cmd = LINBER_SUCCESS_REQUEST;
+					req_node->result_cmd = LINBER_REQUEST_SUCCESS;
 					// copy service result
 
 					req_node->service_result_len = obj->linber_params.end_job.service_result_len;
@@ -503,11 +501,9 @@ static int linber_End_Job(linber_service_struct *obj){
 					copy_from_user(req_node->service_result, obj->linber_params.end_job.service_result, req_node->service_result_len);
 					up(&req_node->Request_sem);	// end job
 				} else {
-					printk(KERN_INFO "linber:: End job spourious job %s\n", obj->service_uri);
-					return LINBER_SKIP_JOB;
+					return LINBER_SERVICE_SKIP_JOB;
 				}
 			} else {
-				printk(KERN_INFO "linber:: get slot error on parameters for %s\n", obj->service_uri);
 				decrease_workers(ser_node);
 				return LINBER_KILL_WORKER;
 			}

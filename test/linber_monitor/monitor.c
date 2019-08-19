@@ -24,7 +24,10 @@ int main(int argc,char* argv[]){
 		system.services[i].uri = malloc(MAX_URI_LEN);
 	}
 
-	linber_init();
+	if(linber_init() < 0){
+		printf("Linber Module not initialized\n");
+		return 0;
+	}
 	while(1){
 		usleep(period);
 		linber_system_status(&system);

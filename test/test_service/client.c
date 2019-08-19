@@ -42,7 +42,7 @@ void *thread_job(void *args){
 		printf("sending request id:%d, service:%s\n", worker.id, worker.service_uri);
 		gettimeofday(&start, NULL);
 		int ret = linber_request_service(worker.service_uri, worker.uri_len, REL_DEADLINE, service_params, service_params_len, service_result, &service_result_len);
-		if(ret == LINBER_ABORT_REQUEST){
+		if(ret < 0){
 			printf("request aborted\n");
 		} else {
 			gettimeofday(&end, NULL);

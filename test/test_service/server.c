@@ -53,7 +53,7 @@ void *thread_job(void *args){
 			if(ret < 0){
 				break;
 			}
-			if(ret != LINBER_SKIP_JOB){
+			if(ret != LINBER_SERVICE_SKIP_JOB){
 				printf("thread id:%d job#:%d, serving request (%s)\n", worker_id, job_num++, service_params);
 				struct timeval start, end;
 				gettimeofday(&start, NULL);
