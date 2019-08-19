@@ -7,7 +7,7 @@
 #include <sys/time.h>
 #include <signal.h>
 
-#include "../libs/linber_service_api.h"
+#include "../../libs/linber_service_api.h"
 
 #define DEFAULT_SERVICE_URI	"org.service\0"
 

@@ -156,35 +156,35 @@ static void destroy_service(ServiceNode *node_service){
 	int i = 0;
 	RequestNode *node_request, *next;
 	mutex_lock(&node_service->service_mutex);
-		list_for_each_entry_safe(node_request, next, &node_service->RequestsHead, list){
-			i++;
-			list_del(&node_request->list);
-			destroy_request(node_request);
-		}
-		list_for_each_entry_safe_reverse(node_request, next, &node_service->RequestsHead, list){
-			i++;
-			list_del(&node_request->list);
-			destroy_request(node_request);
-		}
-		system_requests_count -= i;
-		for(i=0; i<node_service->count_workers; i++){
-			up(&node_service->Workers_sem);
-		}
-		for(i=0; i<node_service->max_concurrent_workers; i++){
-			mutex_unlock(&node_service->Serving_requests.Serving_slots_arr[i].slot_mutex);
-		}
-		node_service->destroy_me = 1;
-		if(node_service->count_workers <= 0){
-			system_services_count--;
-			list_del(&node_service->list);
-			kfree(node_service->uri);
-			system_max_concurrent_workers -= node_service->max_concurrent_workers;
-			kfree(node_service->Serving_requests.Serving_slots_arr);
-			mutex_unlock(&node_service->service_mutex);
-			kfree(node_service);	// done by last worker
-		} else {
-			mutex_unlock(&node_service->service_mutex);
-		}
+	list_for_each_entry_safe(node_request, next, &node_service->RequestsHead, list){
+		i++;
+		list_del(&node_request->list);
+		destroy_request(node_request);
+	}
+	list_for_each_entry_safe_reverse(node_request, next, &node_service->RequestsHead, list){
+		i++;
+		list_del(&node_request->list);
+		destroy_request(node_request);
+	}
+	system_requests_count -= i;
+	for(i=0; i<node_service->count_workers; i++){
+		up(&node_service->Workers_sem);
+	}
+	for(i=0; i<node_service->max_concurrent_workers; i++){
+		mutex_unlock(&node_service->Serving_requests.Serving_slots_arr[i].slot_mutex);
+	}
+	node_service->destroy_me = 1;
+	if(node_service->count_workers <= 0){
+		system_services_count--;
+		list_del(&node_service->list);
+		kfree(node_service->uri);
+		system_max_concurrent_workers -= node_service->max_concurrent_workers;
+		kfree(node_service->Serving_requests.Serving_slots_arr);
+		mutex_unlock(&node_service->service_mutex);
+		kfree(node_service);	// done by last worker
+	} else {
+		mutex_unlock(&node_service->service_mutex);
+	}
 }
 
 //------------------------------------------------------
@@ -275,12 +275,11 @@ static unsigned int get_slot(ServiceNode *ser_node, unsigned int worker_id, requ
 	return slot_id;
 }
 
-static inline void decrease_worker(ServiceNode *ser_node){
+static inline void decrease_workers(ServiceNode *ser_node){
 	mutex_lock(&ser_node->service_mutex);
 	ser_node->count_workers--;
 	mutex_unlock(&ser_node->service_mutex);
 }
-
 
 static int Service_check_Worker(ServiceNode *ser_node, unsigned long service_token, int worker_id){
 	if((ser_node->token == service_token) && (worker_id >= 0)){
@@ -352,10 +351,10 @@ static void unload_slot_and_get_request(ServiceNode *ser_node, RequestNode **req
 			slot->request = NULL;
 			mutex_lock(&ser_node->Serving_requests.Serving_mutex);
 				ser_node->Serving_requests.serving_count--;
+				mutex_lock(&System_mutex);
+					system_serving_requests_count--;
+				mutex_unlock(&System_mutex);
 			mutex_unlock(&ser_node->Serving_requests.Serving_mutex);
-			mutex_lock(&System_mutex);
-				system_serving_requests_count--;
-			mutex_unlock(&System_mutex);
 			mutex_unlock(&slot->slot_mutex);	// release slot
 		}
 	}
@@ -455,7 +454,7 @@ static int linber_Start_Job(linber_service_struct *obj){
 		worker_id = obj->linber_params.start_job.worker_id;
 		service_token = obj->linber_params.start_job.service_token;
 		if(!Service_check_Worker(ser_node, service_token, worker_id)){
-			decrease_worker(ser_node);
+			decrease_workers(ser_node);
 			return LINBER_KILL_WORKER;
 		}
 		if(get_and_load_request_to_slot(ser_node, &req_node, &slot, &slot_id, worker_id) < 0){
@@ -472,7 +471,7 @@ static int linber_Start_Job(linber_service_struct *obj){
 		}
 	} else {
 		printk(KERN_INFO "linber::Start Job  Service:%s does not exists\n", obj->service_uri);
-		decrease_worker(ser_node);
+		decrease_workers(ser_node);
 		return LINBER_KILL_WORKER;
 	}
 	return 0;
@@ -490,7 +489,7 @@ static int linber_End_Job(linber_service_struct *obj){
 		service_token = obj->linber_params.end_job.service_token;
 		slot_id = obj->linber_params.end_job.slot_id;
 		if(!Service_check_Worker(ser_node, service_token, worker_id)){
-			decrease_worker(ser_node);
+			decrease_workers(ser_node);
 			return LINBER_KILL_WORKER;
 		} else {
 			unload_slot_and_get_request(ser_node, &req_node, &slot, slot_id);
@@ -509,7 +508,7 @@ static int linber_End_Job(linber_service_struct *obj){
 				}
 			} else {
 				printk(KERN_INFO "linber:: get slot error on parameters for %s\n", obj->service_uri);
-				decrease_worker(ser_node);
+				decrease_workers(ser_node);
 				return LINBER_KILL_WORKER;
 			}
 		}

@@ -2,7 +2,8 @@ CC = gcc
 CFLAGS = -Wall -pedantic -I.
 LDLIBS = -pthread
 
-TARGET = client server system_monitor
+TARGET = linber_monitor/monitor
+TARGET += test_service/client test_service/server
 
 .PHONY:
 all: $(TARGET)

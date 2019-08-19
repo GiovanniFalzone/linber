@@ -4,9 +4,9 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <string.h>
-#include "../libs/linber_service_api.h"
+#include "../../libs/linber_service_api.h"
 
-#define DEFAULT_PERIOD	1000000	// 1 second in microseconds
+#define DEFAULT_PERIOD	0.5*1000000	// 0.5 second in microseconds
 
 
 int main(int argc,char* argv[]){
