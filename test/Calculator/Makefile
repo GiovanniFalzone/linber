@@ -1,6 +1,10 @@
 CC = g++
 CCFLAGS = -std=c++11 -Wall -Wextra -pedantic -I.
 LDLIBS = -lprotobuf -pthread
+DEP_LIBS = ../../libs/linber_ioctl.h
+DEP_LIBS += ../../libs/linber_service_api.h
+DEP_LIBS += ../../libs/linberServiceServer.h
+DEP_LIBS += ../../libs/linberServiceWorker.h
 
 TARGET = Calculator_server Calculator_client
 SOURCE = Calculator.pb.cc
@@ -8,9 +12,8 @@ SOURCE = Calculator.pb.cc
 .PHONY:
 all: $(TARGET)
 
-%: %.cpp
+%: %.cpp $(DEP_LIBS)
 	protoc Calculator.proto --cpp_out=.
-#	g++ -std=c++11 -o $@ $< Calculator.pb.cc $(CCFLAGS) $(LDLIBS)
 	$(CC) -o $@ $< $(SOURCE) $(CCFLAGS) $(LDLIBS)
 
 .PHONY:
