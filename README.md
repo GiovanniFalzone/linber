@@ -4,6 +4,22 @@ Linber API uses IOCTL to comunicate with the Linber module through the file /dev
 
 Each worker is waiting on the server semaphore, when a request arrive is insert in the FIFO queue and the workers are signaled for this event, take a slot and a request and start serving the request.
 
+## Info and howto
+Distro: Ubuntu 7.4.0-1ubuntu1~18.04.1	\
+Kernel version: 5.0.0-23-generic		\
+gcc version 7.4.0						\
+
+## Warning
+	The module uses 0x20 as magic number and [0-6] as sequence number to register the IOCTL operations.
+	https://elixir.bootlin.com/linux/latest/source/Documentation/ioctl/ioctl-number.txt
+
+### dependencies
+	sudo apt-get install build-essential make libprotobuf-dev protobuf-compiler
+
+### execute
+	./main.sh makeall	// clean and compile inside driver/ and test	/
+	./main.sh insmod	// load the module in the kernel				\
+
 ##Requests burst management
 At the beginning when there are no request, the service has a number of available slots equal to one and just one worker can execute the request.
 Whenever a request arrive the module checks the number of requests in the FIFO queue if there are more requests then active slots the letter are incremented by one up to the maximum parallelism level.
@@ -64,14 +80,6 @@ In this way each service autobalance the number of workers in function of the nu
 	- *service result*, string containing the application level service's parameters
 	- *service result length*, lenght of the service's parameters string
 
-
-## Info and howto
-Distro: Ubuntu 7.4.0-1ubuntu1~18.04.1\
-Kernel version: 5.0.0-23-generic\
-gcc version 7.4.0\
-
-./main.sh makeall	// clean and compile inside driver/ and test/
-./main.sh insmod	// load the module in the kernel
 
 
 ![Linber Component view](/img/Linber_component_view.png)
