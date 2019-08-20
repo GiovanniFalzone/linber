@@ -643,12 +643,13 @@ struct file_operations fops = {
 int init_module(void) {
 	int ret;
 	printk(KERN_INFO "linber:: Registering device %s\n", DEV_NAME);
-	dev_major = MAJOR_NUM;
-	ret = register_chrdev(MAJOR_NUM, DEV_NAME, &fops);
+
+	ret = register_chrdev(0, DEV_NAME, &fops);
 	if (ret < 0) {
 		printk(KERN_ERR "linber:: register_chrdev() failed with: %d\n", ret);
 		return ret;
 	}
+	dev_major = ret;
 	printk(KERN_INFO "linber:: Assigned major: %d\n", dev_major);
 
 	dev_class = class_create(THIS_MODULE, CLA_NAME);
