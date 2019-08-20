@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
+#include <string>
 #include <fcntl.h>
 #include <unistd.h>
 #include <thread>
@@ -15,15 +15,17 @@ class linberServiceWorker {
 	unsigned int worker_id;
 	unsigned int slot_id;
 	unsigned int job_num;
-	char *service_params;
-	int service_params_len;
-	char *service_result;
-	int service_result_len;
 	std::thread thread_worker;
 	bool worker_alive;
 
-	public:
-	linberServiceWorker(char * service_uri, unsigned long service_token, int service_params_len, int service_result_len){
+protected:
+		char *request;
+		int request_len;
+		char *response;
+		int response_len;
+
+public:
+	linberServiceWorker(char * service_uri, unsigned long service_token){
 		this->uri_len = strlen(service_uri) + 1;
 		this->service_uri = (char*)malloc(this->uri_len+1);
 		this->service_uri[this->uri_len-1] = '\0';
@@ -31,10 +33,9 @@ class linberServiceWorker {
 		strcpy(this->service_uri, service_uri);
 		this->service_token = service_token;
 		this->job_num = 0;
-		this->service_params_len = service_params_len;
-		this->service_result_len = service_result_len;
-		service_params = (char*)malloc(service_params_len);
-		service_result = (char*)malloc(service_result_len);
+
+		this->request = NULL;
+		this->response = NULL;
 
 		if(linber_register_service_worker(service_uri, uri_len, service_token, &worker_id) == 0){
 			printf("Started Worker id:%d, service:%s token:%lu\n", worker_id, service_uri, service_token);
@@ -43,32 +44,56 @@ class linberServiceWorker {
 		thread_worker = std::thread(&linberServiceWorker::worker_job, this);
 	}
 
-	virtual ~linberServiceWorker(){
-		worker_alive = false;
+	void join_worker(){
 		if(thread_worker.joinable()){
 			thread_worker.join();
 		}
+	}
+
+	void terminate_worker(){
+		worker_alive = false;
+	}
+
+	virtual ~linberServiceWorker(){
 		free(service_uri);
-		free(service_params);
-		free(service_result);
 	}
 
 	void worker_job(){
 		int ret;
 		linber_init();
 		while(worker_alive){
-			ret = linber_start_job_service(service_uri, uri_len, service_token, worker_id, &slot_id, service_params, &service_params_len);
+			//---------------------------- I don't now the exact dimension, linber not finished
+			request = (char*)malloc(32);
+			//----------------------------
+
+			ret = linber_start_job_service(service_uri, uri_len, service_token, worker_id, &slot_id, request, &request_len);
+
+			//---------------------------- I don't now the exact dimension, linber not finished
+			char *request_2 = (char*)malloc(request_len);
+			memcpy(request_2, request, request_len);
+			if(request != NULL){
+				free(request);
+			}
+			request = request_2;
+			//----------------------------
+
 			if(ret < 0){
 				printf("Job aborted ret %i\n", ret);
 				return;
 			}
 			if(ret != LINBER_SERVICE_SKIP_JOB){
-				printf("Worker id:%d job#:%d, serving request (%s)\n", worker_id, job_num++, service_params);
+				printf("Worker id:%d job#:%d, serving request\n", worker_id, job_num++);
 				execute_job();
 			}
-			ret = linber_end_job_service(service_uri, uri_len, service_token, worker_id, slot_id, service_result, service_result_len);
+
+			ret = linber_end_job_service(service_uri, uri_len, service_token, worker_id, slot_id, response, response_len);
+			//---------------------------- I don't now the exact dimension, linber not finished
+			free(request);
+			//----------------------------
 		}
 	}
 
-	virtual void execute_job(){}
+	virtual void execute_job(){
+		printf("old execute\n");
+	}
 };

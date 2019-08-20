@@ -51,7 +51,7 @@ int ioctl_send(unsigned int cmd, void* param){
 }
 
 //------------------------------------------------
-int linber_register_service(char * service_uri, unsigned int uri_len, unsigned int exec_time, unsigned int max_workers, unsigned long *service_token){
+int linber_register_service(char *service_uri, unsigned int uri_len, unsigned int exec_time, unsigned int max_workers, unsigned long *service_token){
 	int ret = 0;
 	if(linber_fd < 0){
 		printf("Register: device file error\n");
@@ -80,7 +80,7 @@ int linber_register_service(char * service_uri, unsigned int uri_len, unsigned i
 	return ret;
 }
 
-int linber_register_service_worker(char * service_uri, unsigned int uri_len, unsigned long service_token, unsigned int * worker_id){
+int linber_register_service_worker(char *service_uri, unsigned int uri_len, unsigned long service_token, unsigned int * worker_id){
 	int ret = 0;
 	if(linber_fd < 0){
 		printf("RegisterWorker: device file error\n");
@@ -106,7 +106,7 @@ int linber_register_service_worker(char * service_uri, unsigned int uri_len, uns
 	return ret;
 }
 
-int linber_request_service(char * service_uri, unsigned int uri_len, unsigned int rel_deadline,\
+int linber_request_service(char *service_uri, unsigned int uri_len, unsigned int rel_deadline,\
 							char *service_params, int service_params_len, char *service_result, int *service_result_len){
 	int ret = 0;
 	if(linber_fd < 0){
@@ -134,7 +134,7 @@ int linber_request_service(char * service_uri, unsigned int uri_len, unsigned in
 	return ret;
 }
 
-int linber_start_job_service(char * service_uri, unsigned int uri_len, unsigned long service_token, unsigned int worker_id,\
+int linber_start_job_service(char *service_uri, unsigned int uri_len, unsigned long service_token, unsigned int worker_id,\
 								 unsigned int *slot_id, char *service_params, int *service_params_len){
 	int ret = 0;
 	if(linber_fd < 0){
@@ -168,7 +168,7 @@ int linber_start_job_service(char * service_uri, unsigned int uri_len, unsigned 
 	return ret;
 }
 
-int linber_end_job_service(char * service_uri, unsigned int uri_len, unsigned long service_token, unsigned int worker_id,\
+int linber_end_job_service(char *service_uri, unsigned int uri_len, unsigned long service_token, unsigned int worker_id,\
 								 unsigned int slot_id, char *service_result, int service_result_len){
 	int ret = 0;
 	if(linber_fd < 0){
@@ -202,7 +202,7 @@ int linber_end_job_service(char * service_uri, unsigned int uri_len, unsigned lo
 	return ret;
 }
 
-int linber_destroy_service(char * service_uri, unsigned int uri_len, unsigned long service_token){
+int linber_destroy_service(char *service_uri, unsigned int uri_len, unsigned long service_token){
 	int ret = 0;
 	if(linber_fd < 0){
 		printf("Destroy: device file error\n");
