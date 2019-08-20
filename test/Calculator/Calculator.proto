@@ -1,0 +1,15 @@
+syntax = "proto3";
+package Calculator;
+
+enum operation_type {
+	SUM = 0;
+	DIFFERENCE = 1;
+	PRODUCT = 2;
+	DIVISION = 3;
+}
+
+message Calculator_msg {
+	operation_type operation = 1;
+	float operand_a	= 2;
+	float operand_b	= 3;
+}

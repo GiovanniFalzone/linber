@@ -1,16 +1,18 @@
-CC = gcc
-CFLAGS = -Wall -pedantic -I.
-LDLIBS = -pthread
-
-TARGET = linber_monitor/monitor
-TARGET += test_service/client test_service/server
+TARGET = linber_monitor
+TARGET += test_service
+TARGET += Calculator
 
 .PHONY:
 all: $(TARGET)
+	for d in $(TARGET); \
+	do                               \
+		$(MAKE) --directory=$$d all; \
+	done
 
-%.o: %.c
-	$(CC) -c -o $@ $< $(CFLAGS) $(LDLIBS)
 
 .PHONY:
 clean:
-	rm -f *.o $(TARGET)
+	for d in $(TARGET); \
+	do                               \
+		$(MAKE) --directory=$$d clean; \
+	done

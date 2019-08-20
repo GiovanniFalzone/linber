@@ -24,7 +24,7 @@ int abort_and_Exit = 0;
 typedef struct{
 	pthread_t tid;
 	unsigned long service_token;
-	int exec_time;
+	unsigned int exec_time;
 } thread_info;
 
 

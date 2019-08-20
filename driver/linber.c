@@ -454,9 +454,11 @@ static int linber_Start_Job(linber_service_struct *obj){
 		service_token = obj->linber_params.start_job.service_token;
 		if(!Service_check_Worker(ser_node, service_token, worker_id)){
 			decrease_workers(ser_node);
+			printk(KERN_INFO "Service Check Worker failded token:%lu id:%u\n", service_token, worker_id);
 			return LINBER_KILL_WORKER;
 		}
 		if(get_and_load_request_to_slot(ser_node, &req_node, &slot, &slot_id, worker_id) < 0){
+			printk(KERN_INFO "get slot failded id:%u\n", worker_id);
 			return LINBER_KILL_WORKER;
 		}
 		if(req_node == NULL){
@@ -569,7 +571,7 @@ static int linber_get_system_status(void* system_user){
 
 
 //-------------------------------------------------------------
-static long		linber_ioctl(struct file *f, unsigned int ioctl_op, unsigned long ioctl_param){ 
+static long	linber_ioctl(struct file *f, unsigned int ioctl_op, unsigned long ioctl_param){ 
 	int ret;
 	char *uri_tmp;
 	linber_service_struct *obj;
@@ -588,7 +590,6 @@ static long		linber_ioctl(struct file *f, unsigned int ioctl_op, unsigned long i
 			break;
 
 		case IOCTL_REQUEST_SERVICE:
-			//copy from user params
 			ret = linber_request_service(obj);
 			break;
 
@@ -601,7 +602,6 @@ static long		linber_ioctl(struct file *f, unsigned int ioctl_op, unsigned long i
 			break;
 
 		case IOCTL_END_JOB_SERVICE:
-			// copy from user ret
 			ret = linber_End_Job(obj);
 			break;
 
@@ -615,7 +615,7 @@ static long		linber_ioctl(struct file *f, unsigned int ioctl_op, unsigned long i
 
 		default:
 			printk(KERN_ERR "linber:: IOCTL operation %d not implemented\n", ioctl_op);
-			ret = -1;
+			ret = LINBER_IOCTL_NOT_IMPLEMENTED;
 			break;
 	}
 	if(ioctl_op != IOCTL_SYSTEM_STATUS){
