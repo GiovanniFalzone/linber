@@ -3,7 +3,6 @@ CCFLAGS = -std=c++11 -Wall -Wextra -pedantic -I.
 LDLIBS = -lprotobuf -pthread
 DEP_LIBS = ../../libs/linber_ioctl.h
 DEP_LIBS += ../../libs/linber_service_api.h
-DEP_LIBS += ../../libs/linberServiceServer.h
 DEP_LIBS += ../../libs/linberServiceWorker.h
 
 TARGET = Calculator_server Calculator_client

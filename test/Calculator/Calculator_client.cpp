@@ -7,25 +7,48 @@
 using namespace std;
 
 int main(){
-	Calculator::Calculator_msg msg;
-	msg.set_operand_a(1);
-	msg.set_operand_b(2);
-	msg.set_operation(Calculator::SUM);
-
-	cout << msg.operation() <<"("<< msg.operand_a() <<","<< msg.operand_b() <<")"<< endl;
-	string str_msg = string(msg.ByteSize(), '\0');
-	msg.SerializeToString(&str_msg);
-	char * result;
-	char * params = new char[str_msg.size() + 1];
-	copy(str_msg.begin(), str_msg.end(), params);
-	params[str_msg.size()] = '\0';
-
-	int result_len;
+	Calculator::Calculator_request request_msg;
+	Calculator::Calculator_response response_msg;
+	int request_len;
+	int response_len;
+	char* request;
+	char * response;
 
 	linber_init();
-	linber_request_service("org.calculator1", sizeof("org.calculator1"), 10, params, str_msg.size(), result, &result_len);
-	linber_exit();
 
-	delete[] params;
+	for(int i=0; i < 100; i++){
+		request_msg.Clear();
+		request_msg.set_operand_a(i);
+		request_msg.set_operand_b(i);
+		request_msg.set_operation(Calculator::PRODUCT);
+
+		request_len = request_msg.ByteSize();
+		request = (char*)malloc(request_len);
+//---------------------------- I don't now the exact dimension, linber not finished
+		response = (char*)malloc(32);
+//----------------------------
+
+		cout << request_msg.operation() <<"("<< request_msg.operand_a() <<","<< request_msg.operand_b() <<")" << "len:" << request_len << endl;
+		request_msg.SerializeToArray(request, request_len);
+
+		linber_request_service("org.calculator", sizeof("org.calculator1"), 100, request, request_len, response, &response_len);
+
+		//---------------------------- I don't now the exact dimension, linber not finished
+		char *response_2 = (char*)malloc(response_len);
+		memcpy(response_2, response, response_len);
+		free(response);
+		response = response_2;
+		//----------------------------
+
+		response_msg.ParseFromArray(response, response_len);
+		cout << "Result: "<< response_msg.result() << endl;
+
+		free(request);
+//---------------------------- I don't now the exact dimension, linber not finished
+		free(response);
+//----------------------------
+	}
+
+	linber_exit();
 	return 0;
 }

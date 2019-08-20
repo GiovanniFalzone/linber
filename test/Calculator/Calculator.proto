@@ -8,8 +8,12 @@ enum operation_type {
 	DIVISION = 3;
 }
 
-message Calculator_msg {
+message Calculator_request {
 	operation_type operation = 1;
 	float operand_a	= 2;
 	float operand_b	= 3;
+}
+
+message Calculator_response {
+	float result	= 1;
 }
