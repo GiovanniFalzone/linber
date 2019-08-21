@@ -8,13 +8,15 @@
 #define MAX_SERVICES	10
 #define MAX_URI_LEN		64
 
-#define IOCTL_REQUEST_SERVICE			_IOWR(MAGIC_NUM, SEQ_NUM+0, char*)
-#define IOCTL_REGISTER_SERVICE			_IOWR(MAGIC_NUM, SEQ_NUM+1, char*)
-#define IOCTL_REGISTER_SERVICE_WORKER	_IOWR(MAGIC_NUM, SEQ_NUM+2, char*)
-#define IOCTL_START_JOB_SERVICE			_IOWR(MAGIC_NUM, SEQ_NUM+3, char*)
-#define IOCTL_END_JOB_SERVICE			_IOWR(MAGIC_NUM, SEQ_NUM+4, char*)
-#define IOCTL_DESTROY_SERVICE			_IOWR(MAGIC_NUM, SEQ_NUM+5, char*)
-#define IOCTL_SYSTEM_STATUS				_IOWR(MAGIC_NUM, SEQ_NUM+6, char*)
+#define IOCTL_REGISTER_SERVICE						_IOWR(MAGIC_NUM, SEQ_NUM+1, char*)
+#define IOCTL_REGISTER_SERVICE_WORKER				_IOWR(MAGIC_NUM, SEQ_NUM+2, char*)
+#define IOCTL_START_JOB_SERVICE						_IOWR(MAGIC_NUM, SEQ_NUM+3, char*)
+#define IOCTL_START_JOB_GET_REQUEST_SERVICE			_IOWR(MAGIC_NUM, SEQ_NUM+4, char*)
+#define IOCTL_END_JOB_SERVICE						_IOWR(MAGIC_NUM, SEQ_NUM+5, char*)
+#define IOCTL_DESTROY_SERVICE						_IOWR(MAGIC_NUM, SEQ_NUM+6, char*)
+#define IOCTL_SYSTEM_STATUS							_IOWR(MAGIC_NUM, SEQ_NUM+7, char*)
+#define IOCTL_REQUEST_SERVICE						_IOWR(MAGIC_NUM, SEQ_NUM+8, char*)
+#define IOCTL_REQUEST_SERVICE_GET_RESPONSE			_IOWR(MAGIC_NUM, SEQ_NUM+9, char*)
 
 
 #define DEVICE_FILE_NAME		"linber"
@@ -59,26 +61,27 @@ typedef struct linber_service_struct {
 
 		struct request {
 			unsigned int rel_deadline;
-			char *service_params;
-			int service_params_len;
-			char *ptr_service_result;
-			int *ptr_service_result_len;
+			unsigned long *ptr_token;
+			char *service_request;
+			int service_request_len;
+			char *ptr_service_response;
+			int *ptr_service_response_len;
 		} request;
 
 		struct start_job{
 			unsigned int worker_id;	// start job
 			unsigned long service_token;
 			unsigned int *ptr_slot_id;
-			char *ptr_service_params;
-			int *ptr_service_params_len;
+			char *ptr_service_request;
+			int *ptr_service_request_len;
 		} start_job;
 
 		struct end_job{
 			unsigned int worker_id;
 			unsigned long service_token;
 			unsigned int slot_id;
-			char *service_result;
-			int service_result_len;
+			char *service_response;
+			int service_response_len;
 		} end_job;
 	} linber_params;
 } linber_service_struct;

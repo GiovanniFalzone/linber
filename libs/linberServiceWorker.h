@@ -62,20 +62,7 @@ public:
 		int ret;
 		linber_init();
 		while(worker_alive){
-			//---------------------------- I don't now the exact dimension, linber not finished
-			request = (char*)malloc(32);
-			//----------------------------
-
-			ret = linber_start_job_service(service_uri, uri_len, service_token, worker_id, &slot_id, request, &request_len);
-
-			//---------------------------- I don't now the exact dimension, linber not finished
-			char *request_2 = (char*)malloc(request_len);
-			memcpy(request_2, request, request_len);
-			if(request != NULL){
-				free(request);
-			}
-			request = request_2;
-			//----------------------------
+			ret = linber_start_job_service(service_uri, uri_len, service_token, worker_id, &slot_id, &request, &request_len);
 
 			if(ret < 0){
 				printf("Job aborted ret %i\n", ret);
@@ -86,10 +73,10 @@ public:
 				execute_job();
 			}
 
+			if(request != NULL){
+				free(request);
+			}
 			ret = linber_end_job_service(service_uri, uri_len, service_token, worker_id, slot_id, response, response_len);
-			//---------------------------- I don't now the exact dimension, linber not finished
-			free(request);
-			//----------------------------
 		}
 	}
 

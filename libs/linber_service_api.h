@@ -107,8 +107,9 @@ int linber_register_service_worker(char *service_uri, unsigned int uri_len, unsi
 }
 
 int linber_request_service(char *service_uri, unsigned int uri_len, unsigned int rel_deadline,\
-							char *service_params, int service_params_len, char *service_result, int *service_result_len){
+							char *service_request, int service_request_len, char **service_response, int *service_response_len){
 	int ret = 0;
+	unsigned long token;
 	if(linber_fd < 0){
 		printf("Request: device file error\n");
 		return LINBER_ERROR_DEVICE_FILE;
@@ -120,12 +121,21 @@ int linber_request_service(char *service_uri, unsigned int uri_len, unsigned int
 	linber_service_struct param;
 	param.service_uri = service_uri;
 	param.service_uri_len = uri_len;
-	param.linber_params.request.service_params = service_params;
-	param.linber_params.request.service_params_len = service_params_len;
-	param.linber_params.request.ptr_service_result = service_result;
-	param.linber_params.request.ptr_service_result_len = service_result_len;
+	param.linber_params.request.service_request = service_request;
+	param.linber_params.request.service_request_len = service_request_len;
+	param.linber_params.request.ptr_service_response_len = service_response_len;
 	param.linber_params.request.rel_deadline = rel_deadline;
+	param.linber_params.request.ptr_token = &token;
 	ret = ioctl_send(IOCTL_REQUEST_SERVICE, &param);
+	if(ret == LINBER_REQUEST_SUCCESS){
+		*service_response = (char*)malloc(*service_response_len);
+		if(service_response != NULL){
+			param.linber_params.request.ptr_service_response = *service_response;
+			ret = ioctl_send(IOCTL_REQUEST_SERVICE_GET_RESPONSE, &param);
+		} else {
+			ret = LINBER_REQUEST_FAILED;
+		}
+	}
 	switch(ret){
 		case LINBER_SERVICE_NOT_EXISTS:
 			printf("Request: Service %s does not exists\n", service_uri);
@@ -135,7 +145,7 @@ int linber_request_service(char *service_uri, unsigned int uri_len, unsigned int
 }
 
 int linber_start_job_service(char *service_uri, unsigned int uri_len, unsigned long service_token, unsigned int worker_id,\
-								 unsigned int *slot_id, char *service_params, int *service_params_len){
+								 unsigned int *slot_id, char **service_request, int *service_request_len){
 	int ret = 0;
 	if(linber_fd < 0){
 		printf("StartJob: device file error\n");
@@ -151,9 +161,13 @@ int linber_start_job_service(char *service_uri, unsigned int uri_len, unsigned l
 	param.linber_params.start_job.worker_id = worker_id;
 	param.linber_params.start_job.service_token = service_token;
 	param.linber_params.start_job.ptr_slot_id = slot_id;
-	param.linber_params.start_job.ptr_service_params = service_params;
-	param.linber_params.start_job.ptr_service_params_len = service_params_len;
+	param.linber_params.start_job.ptr_service_request_len = service_request_len;
 	ret = ioctl_send(IOCTL_START_JOB_SERVICE, &param);
+	if(ret >= 0){
+		*service_request = (char*)malloc(*service_request_len);
+		param.linber_params.start_job.ptr_service_request = *service_request;
+		ret = ioctl_send(IOCTL_START_JOB_GET_REQUEST_SERVICE, &param);
+	}
 	switch(ret){
 		case LINBER_SERVICE_NOT_EXISTS:
 			printf("StartJob: Service %s does not exists\n", service_uri);
@@ -169,7 +183,7 @@ int linber_start_job_service(char *service_uri, unsigned int uri_len, unsigned l
 }
 
 int linber_end_job_service(char *service_uri, unsigned int uri_len, unsigned long service_token, unsigned int worker_id,\
-								 unsigned int slot_id, char *service_result, int service_result_len){
+								 unsigned int slot_id, char *service_response, int service_response_len){
 	int ret = 0;
 	if(linber_fd < 0){
 		printf("EndJob: device file error\n");
@@ -185,8 +199,8 @@ int linber_end_job_service(char *service_uri, unsigned int uri_len, unsigned lon
 	param.linber_params.end_job.worker_id = worker_id;
 	param.linber_params.end_job.service_token = service_token;
 	param.linber_params.end_job.slot_id = slot_id;
-	param.linber_params.end_job.service_result = service_result;
-	param.linber_params.end_job.service_result_len = service_result_len;
+	param.linber_params.end_job.service_response = service_response;
+	param.linber_params.end_job.service_response_len = service_response_len;
 	ret = ioctl_send(IOCTL_END_JOB_SERVICE, &param);
 	switch(ret){
 		case LINBER_SERVICE_NOT_EXISTS:
