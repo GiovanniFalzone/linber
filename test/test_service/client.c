@@ -33,7 +33,7 @@ void sig_handler(int signo){
 void *thread_job(void *args){
 	char *service_params = "ciao\0";
 	int service_params_len = strlen(service_params) + 1;
-	char *service_result = malloc(64);
+	char *service_result;
 	int service_result_len;
 	thread_info worker = *(thread_info*)args;
 	struct timeval start, end;
@@ -41,7 +41,7 @@ void *thread_job(void *args){
 	if(abort_request == 0){
 		printf("sending request id:%d, service:%s\n", worker.id, worker.service_uri);
 		gettimeofday(&start, NULL);
-		int ret = linber_request_service(worker.service_uri, worker.uri_len, REL_DEADLINE, service_params, service_params_len, service_result, &service_result_len);
+		int ret = linber_request_service(worker.service_uri, worker.uri_len, REL_DEADLINE, service_params, service_params_len, &service_result, &service_result_len);
 		if(ret < 0){
 			printf("request aborted\n");
 		} else {

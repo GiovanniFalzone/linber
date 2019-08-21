@@ -37,24 +37,22 @@ void sig_handler(int signo){
 }
 
 void *thread_job(void *args){
-	int ret, job_num = 1, service_params_len, service_result_len;
+	int ret, job_num = 1, service_request_len, service_response_len;
 	unsigned int worker_id, slot_id;
-	char *service_params, *service_result;
+	char *service_request, *service_response;
 	thread_info worker = *(thread_info*)args;
-//-----------------------------
-	service_params = malloc(32);
-	service_result = "bye\0";
-	service_result_len = strlen(service_result) + 1;
-//-----------------------------
+	service_response = "bye\0";
+	service_response_len = strlen(service_response) + 1;
+
 	if(linber_register_service_worker(service_uri, uri_len,worker.service_token, &worker_id) == 0){
 		printf("started_thread id:%d, service:%s\n", worker_id, service_uri);
 		while(1){
-			ret = linber_start_job_service(service_uri, uri_len, worker.service_token, worker_id, &slot_id, service_params, &service_params_len);
+			ret = linber_start_job_service(service_uri, uri_len, worker.service_token, worker_id, &slot_id, &service_request, &service_request_len);
 			if(ret < 0){
 				break;
 			}
 			if(ret != LINBER_SERVICE_SKIP_JOB){
-				printf("thread id:%d job#:%d, serving request (%s)\n", worker_id, job_num++, service_params);
+				printf("thread id:%d job#:%d, serving request (%s)\n", worker_id, job_num++, service_request);
 				struct timeval start, end;
 				gettimeofday(&start, NULL);
 				unsigned long passed_millis = 0;
@@ -63,7 +61,7 @@ void *thread_job(void *args){
 					passed_millis = (end.tv_sec - start.tv_sec) * 1000 + (end.tv_usec - start.tv_usec) / 1000;
 				} while(passed_millis < worker.exec_time);
 			}
-			ret = linber_end_job_service(service_uri, uri_len, worker.service_token, worker_id, slot_id, service_result, service_result_len);
+			ret = linber_end_job_service(service_uri, uri_len, worker.service_token, worker_id, slot_id, service_response, service_response_len);
 		}
 	}
 	printf("Thread %d died\n", worker_id);
