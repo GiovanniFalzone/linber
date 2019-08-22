@@ -4,6 +4,12 @@ Linber API uses IOCTL to comunicate with the Linber module through the file /dev
 
 Each worker is waiting on the server semaphore, when a request arrive is insert in the FIFO queue and the workers are signaled for this event, take a slot and a request and start serving the request.
 
+
+![Linber Component view](/img/Linber_component_view.png)
+![Linber Stack](/img/Linber_stack.png)
+![Linber Sequence Diagram](/img/Linber_sequence.png)
+
+
 ## Info and howto
 Distro: Ubuntu 7.4.0-1ubuntu1~18.04.1	\
 Kernel version: 5.0.0-23-generic		\
@@ -19,6 +25,10 @@ gcc version 7.4.0						\
 ### execute
 	./main.sh makeall	// clean and compile inside driver/ and test	/
 	./main.sh insmod	// load the module in the kernel				\
+
+
+
+
 
 ##Requests burst management
 At the beginning when there are no request, the service has a number of available slots equal to one and just one worker can execute the request.
@@ -80,8 +90,4 @@ In this way each service autobalance the number of workers in function of the nu
 	- *service result*, string containing the application level service's parameters
 	- *service result length*, lenght of the service's parameters string
 
-
-
-![Linber Component view](/img/Linber_component_view.png)
-![Linber Stack](/img/Linber_stack.png)
 
