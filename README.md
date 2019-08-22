@@ -27,9 +27,6 @@ gcc version 7.4.0						\
 	./main.sh insmod	// load the module in the kernel				\
 
 
-
-
-
 ##Requests burst management
 At the beginning when there are no request, the service has a number of available slots equal to one and just one worker can execute the request.
 Whenever a request arrive the module checks the number of requests in the FIFO queue if there are more requests then active slots the letter are incremented by one up to the maximum parallelism level.
