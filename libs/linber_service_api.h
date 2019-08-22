@@ -32,13 +32,19 @@ int linber_exit(){
 }
 
 int ioctl_send(unsigned int cmd, void* param){
+	int uninitialized = 0;
 	if(linber_fd < 0){
+		uninitialized = 1;
 		linber_init();
 		if(linber_fd < 0){
 			printf("Device file error\n");
+			return LINBER_ERROR_DEVICE_FILE;
 		}
 	}
 	long ret = ioctl(linber_fd, cmd, param);
+	if(uninitialized == 1){
+		linber_exit();
+	}
 	if(ret < 0){
 		printf("------------Linber err %li fd:%i----------------\n", ret, linber_fd);
 	}
@@ -53,14 +59,6 @@ int ioctl_send(unsigned int cmd, void* param){
 //------------------------------------------------
 int linber_register_service(char *service_uri, unsigned int uri_len, unsigned int exec_time, unsigned int max_workers, unsigned long *service_token){
 	int ret = 0;
-	if(linber_fd < 0){
-		printf("Register: device file error\n");
-		return LINBER_ERROR_DEVICE_FILE;
-	}
-	if(uri_len > SERVICE_URI_MAX_LEN){
-		printf("Register: uri size too large\n");
-		return LINBER_ERROR_URI;
-	}
 	linber_service_struct param;
 	param.service_uri = service_uri;
 	param.service_uri_len = uri_len;
@@ -82,14 +80,6 @@ int linber_register_service(char *service_uri, unsigned int uri_len, unsigned in
 
 int linber_register_service_worker(char *service_uri, unsigned int uri_len, unsigned long service_token, unsigned int * worker_id){
 	int ret = 0;
-	if(linber_fd < 0){
-		printf("RegisterWorker: device file error\n");
-		return LINBER_ERROR_DEVICE_FILE;
-	}
-	if(uri_len > SERVICE_URI_MAX_LEN){
-		printf("RegisterWorker: uri size too large\n");
-		return LINBER_ERROR_URI;
-	}
 	linber_service_struct param;
 	param.service_uri = service_uri;
 	param.service_uri_len = uri_len;
@@ -106,18 +96,12 @@ int linber_register_service_worker(char *service_uri, unsigned int uri_len, unsi
 	return ret;
 }
 
+// blocking
 int linber_request_service(char *service_uri, unsigned int uri_len, unsigned int rel_deadline,\
-							char *service_request, int service_request_len, char **service_response, int *service_response_len){
+							char *service_request, int service_request_len,\
+							char **service_response, int *service_response_len){
 	int ret = 0;
 	unsigned long token;
-	if(linber_fd < 0){
-		printf("Request: device file error\n");
-		return LINBER_ERROR_DEVICE_FILE;
-	}
-	if(uri_len > SERVICE_URI_MAX_LEN){
-		printf("Request: uri size too large\n");
-		return LINBER_ERROR_URI;
-	}
 	linber_service_struct param;
 	param.service_uri = service_uri;
 	param.service_uri_len = uri_len;
@@ -126,6 +110,10 @@ int linber_request_service(char *service_uri, unsigned int uri_len, unsigned int
 	param.linber_params.request.ptr_service_response_len = service_response_len;
 	param.linber_params.request.rel_deadline = rel_deadline;
 	param.linber_params.request.ptr_token = &token;
+
+	param.linber_params.request.blocking = 1;
+	param.linber_params.request.request_status = LINBER_REQUEST_INIT;
+
 	ret = ioctl_send(IOCTL_REQUEST_SERVICE, &param);
 	if(ret == LINBER_REQUEST_SUCCESS){
 		*service_response = (char*)malloc(*service_response_len);
@@ -144,17 +132,63 @@ int linber_request_service(char *service_uri, unsigned int uri_len, unsigned int
 	return ret;
 }
 
+int linber_request_service_no_blocking(char *service_uri, unsigned int uri_len, unsigned int rel_deadline,\
+										char *service_request, int service_request_len,\
+										unsigned long *ptr_token){
+	int ret = 0;
+	linber_service_struct param;
+	param.service_uri = service_uri;
+	param.service_uri_len = uri_len;
+	param.linber_params.request.service_request = service_request;
+	param.linber_params.request.service_request_len = service_request_len;
+	param.linber_params.request.rel_deadline = rel_deadline;
+	param.linber_params.request.ptr_token = ptr_token;
+
+	param.linber_params.request.blocking = 0;
+	param.linber_params.request.request_status = LINBER_REQUEST_INIT;
+
+	ret = ioctl_send(IOCTL_REQUEST_SERVICE, &param);
+	switch(ret){
+		case LINBER_SERVICE_NOT_EXISTS:
+			printf("Request: Service %s does not exists\n", service_uri);
+			break;
+	}
+	return ret;
+}
+
+int linber_request_service_get_response(char *service_uri, unsigned int uri_len,\
+										char **service_response, int *service_response_len,\
+										unsigned long *ptr_token){
+	int ret = 0;
+	linber_service_struct param;
+	param.service_uri = service_uri;
+	param.service_uri_len = uri_len;
+	param.linber_params.request.ptr_service_response_len = service_response_len;
+	param.linber_params.request.ptr_token = ptr_token;
+	param.linber_params.request.request_status = LINBER_REQUEST_WAITING;
+
+	ret = ioctl_send(IOCTL_REQUEST_SERVICE, &param);
+	if(ret == LINBER_REQUEST_SUCCESS){
+		*service_response = (char*)malloc(*service_response_len);
+		if(service_response != NULL){
+			param.linber_params.request.ptr_service_response = *service_response;
+			ret = ioctl_send(IOCTL_REQUEST_SERVICE_GET_RESPONSE, &param);
+		} else {
+			ret = LINBER_REQUEST_FAILED;
+		}
+	}
+	switch(ret){
+		case LINBER_SERVICE_NOT_EXISTS:
+			printf("Request: Service %s does not exists\n", service_uri);
+			break;
+	}
+	return ret;
+}
+
+
 int linber_start_job_service(char *service_uri, unsigned int uri_len, unsigned long service_token, unsigned int worker_id,\
 								 unsigned int *slot_id, char **service_request, int *service_request_len){
 	int ret = 0;
-	if(linber_fd < 0){
-		printf("StartJob: device file error\n");
-		return LINBER_ERROR_DEVICE_FILE;
-	}
-	if(uri_len > SERVICE_URI_MAX_LEN){
-		printf("StartJob: uri size too large\n");
-		return LINBER_ERROR_URI;
-	}
 	linber_service_struct param;
 	param.service_uri = service_uri;
 	param.service_uri_len = uri_len;
@@ -185,14 +219,6 @@ int linber_start_job_service(char *service_uri, unsigned int uri_len, unsigned l
 int linber_end_job_service(char *service_uri, unsigned int uri_len, unsigned long service_token, unsigned int worker_id,\
 								 unsigned int slot_id, char *service_response, int service_response_len){
 	int ret = 0;
-	if(linber_fd < 0){
-		printf("EndJob: device file error\n");
-		return LINBER_ERROR_DEVICE_FILE;
-	}
-	if(uri_len > SERVICE_URI_MAX_LEN){
-		printf("EndJob: uri size too large\n");
-		return LINBER_ERROR_URI;
-	}
 	linber_service_struct param;
 	param.service_uri = service_uri;
 	param.service_uri_len = uri_len;
@@ -218,14 +244,6 @@ int linber_end_job_service(char *service_uri, unsigned int uri_len, unsigned lon
 
 int linber_destroy_service(char *service_uri, unsigned int uri_len, unsigned long service_token){
 	int ret = 0;
-	if(linber_fd < 0){
-		printf("Destroy: device file error\n");
-		return LINBER_ERROR_DEVICE_FILE;
-	}
-	if(uri_len > SERVICE_URI_MAX_LEN){
-		printf("Destroy: uri size too large\n");
-		return LINBER_ERROR_URI;
-	}
 	linber_service_struct param;
 	param.service_uri = service_uri;
 	param.service_uri_len = uri_len;
@@ -241,10 +259,6 @@ int linber_destroy_service(char *service_uri, unsigned int uri_len, unsigned lon
 
 int linber_system_status(system_status *system){
 	int ret = 0;
-	if(linber_fd < 0){
-		printf("Status: device file error\n");
-		return LINBER_ERROR_DEVICE_FILE;
-	}
 	ret = ioctl_send(IOCTL_SYSTEM_STATUS, system);
 	return ret;
 }

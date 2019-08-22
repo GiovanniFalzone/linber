@@ -125,13 +125,52 @@ static RequestNode *Dequeue_Request(struct list_head *head){
 
 
 static ServiceNode* findService(char *uri){
-	ServiceNode *node;
-	list_for_each_entry(node, &ServicesHead, list){
-		if(strcmp(node->uri, uri) == 0){
-			return node;
+	ServiceNode *ser_node = NULL;
+	mutex_lock(&System_mutex);
+	list_for_each_entry(ser_node, &ServicesHead, list){
+		if(strcmp(ser_node->uri, uri) == 0){
+			mutex_unlock(&System_mutex);
+			return ser_node;
 		}
 	}
+	mutex_unlock(&System_mutex);
 	return NULL;
+}
+
+static RequestNode* findWaiting_or_Completed_Request(ServiceNode* ser_node, unsigned long token){
+	RequestNode *req_node = NULL, *node = NULL;
+	int i = 0;
+	mutex_lock(&ser_node->service_mutex);
+	// search in waiting
+	list_for_each_entry(node, &ServicesHead, list){
+		if(node->token == token){
+			req_node = node;
+			mutex_unlock(&ser_node->service_mutex);
+			return req_node;
+		}
+	}
+	// search in serving
+	if(req_node == NULL){
+		for(i=0; i<ser_node->Serving_requests.max_slots; i++){
+			node = ser_node->Serving_requests.Serving_slots_arr[i].request;
+			if((node != NULL) && (node->token == token)){
+				mutex_unlock(&ser_node->service_mutex);
+				return req_node;
+			}
+		}		
+	}
+	// search in completed
+	if(req_node == NULL){
+		list_for_each_entry(node, &ser_node->Completed_RequestsHead, list){
+			if(node->token == token){	
+				req_node = node;
+				mutex_unlock(&ser_node->service_mutex);
+				return req_node;
+			}
+		}
+	}
+	mutex_unlock(&ser_node->service_mutex);
+	return req_node;
 }
 
 static inline void destroy_request(RequestNode *req_node){
@@ -194,6 +233,7 @@ static ServiceNode * linber_create_service(linber_service_struct *obj){
 	node->Serving_requests.Serving_slots_arr = kmalloc(node->Serving_requests.max_slots*sizeof(request_slot), GFP_KERNEL);
 	for(i=0; i<node->Serving_requests.max_slots; i++){
 		mutex_init(&node->Serving_requests.Serving_slots_arr[i].slot_mutex);
+		node->Serving_requests.Serving_slots_arr[i].request = NULL;
 	}
 
 	mutex_init(&node->Serving_requests.Serving_mutex);
@@ -208,7 +248,7 @@ static ServiceNode * linber_create_service(linber_service_struct *obj){
 	return node;
 }
 
-static RequestNode* enqueue_request_for_service(ServiceNode *ser_node, char *service_request, unsigned int service_request_len){
+static RequestNode* enqueue_request_for_service(ServiceNode *ser_node, char *service_request, unsigned int service_request_len, int blocking){
 	RequestNode *req_node;
 	req_node = create_Request();
 	if(req_node != NULL){
@@ -226,7 +266,9 @@ static RequestNode* enqueue_request_for_service(ServiceNode *ser_node, char *ser
 
 		req_node->request_accepted = LINBER_REQUEST_ACCEPTED;
 		up(&ser_node->Workers_sem);
-		down(&req_node->Request_sem);
+		if(blocking == 1){
+			down(&req_node->Request_sem);
+		}
 	}
 	return req_node;
 }
@@ -403,31 +445,55 @@ static int linber_register_service(linber_service_struct *obj){
 }
 
 static int linber_request_service(linber_service_struct *obj){
-	int ret = 0;
-	RequestNode *req_node;
-	ServiceNode *ser_node;
+	int ret = LINBER_REQUEST_FAILED;
+	RequestNode *req_node = NULL;
+	ServiceNode *ser_node = NULL;
 	char *service_request;
 	unsigned int service_request_len;
+	unsigned long token;
 	ser_node = findService(obj->service_uri);
 	if(ser_node != NULL && (ser_node->destroy_me == 0)){
-		service_request_len = obj->linber_params.request.service_request_len;
-		service_request = kmalloc(service_request_len, GFP_KERNEL);
-		checkMemoryError(copy_from_user(service_request, obj->linber_params.request.service_request, service_request_len));
-	
-		service_load_balancing(ser_node);
-		req_node = enqueue_request_for_service(ser_node, service_request, service_request_len);
-
-		ret = req_node->result_cmd;
-		if(ret == LINBER_REQUEST_SUCCESS){
-			checkMemoryError(put_user(req_node->service_response_len, obj->linber_params.request.ptr_service_response_len));
+		//----------------------init-----------------------
+		if(obj->linber_params.request.request_status == LINBER_REQUEST_INIT){
+			service_request_len = obj->linber_params.request.service_request_len;
+			service_request = kmalloc(service_request_len, GFP_KERNEL);
+			checkMemoryError(copy_from_user(service_request, obj->linber_params.request.service_request, service_request_len));
+			service_load_balancing(ser_node);
+			req_node = enqueue_request_for_service(ser_node, service_request, service_request_len, (obj->linber_params.request.blocking == 1));
+			if(req_node == NULL){
+				return LINBER_REQUEST_FAILED;
+			}
 			checkMemoryError(put_user(req_node->token, obj->linber_params.request.ptr_token));
-			enqueue_request_completed(ser_node, req_node);
+			obj->linber_params.request.request_status = LINBER_REQUEST_COMPLETED;
+			if(obj->linber_params.request.blocking == 0){
+				return LINBER_REQUEST_WAITING;
+			}
+		}
+		//----------------------waiting-----------------------
+		if(obj->linber_params.request.request_status == LINBER_REQUEST_WAITING){
+			checkMemoryError(get_user(token, obj->linber_params.request.ptr_token));
+			req_node = findWaiting_or_Completed_Request(ser_node, token);
+			if(req_node == NULL){
+				return LINBER_REQUEST_FAILED;
+			}
+			down(&req_node->Request_sem);
+			obj->linber_params.request.request_status = LINBER_REQUEST_COMPLETED;
+		}
+		//----------------------completed-----------------------
+		if(obj->linber_params.request.request_status == LINBER_REQUEST_COMPLETED){
+			if(req_node != NULL){
+				ret = req_node->result_cmd;
+				if(ret == LINBER_REQUEST_SUCCESS){
+					checkMemoryError(put_user(req_node->service_response_len, obj->linber_params.request.ptr_service_response_len));
+				}
+			}
 		}
 	} else {
 		ret = LINBER_SERVICE_NOT_EXISTS;
 	}
 	return ret;
 }
+
 
 static int linber_request_service_get_response(linber_service_struct *obj){
 	int ret = 0;
@@ -564,6 +630,7 @@ static int linber_End_Job(linber_service_struct *obj){
 					req_node->service_response_len = obj->linber_params.end_job.service_response_len;
 					req_node->service_response = kmalloc(req_node->service_response_len, GFP_KERNEL);
 					checkMemoryError(copy_from_user(req_node->service_response, obj->linber_params.end_job.service_response, req_node->service_response_len));
+					enqueue_request_completed(ser_node, req_node);
 					up(&req_node->Request_sem);	// end job
 				} else {
 					return LINBER_SERVICE_SKIP_JOB;

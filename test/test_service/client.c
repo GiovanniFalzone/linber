@@ -19,6 +19,7 @@ typedef struct{
 	int id;
 	char *service_uri;
 	int uri_len;
+	int blocking;
 } thread_info;
 
 int abort_request = 0;
@@ -31,23 +32,35 @@ void sig_handler(int signo){
 }
 
 void *thread_job(void *args){
-	char *service_params = "ciao\0";
-	int service_params_len = strlen(service_params) + 1;
-	char *service_result;
-	int service_result_len;
+	char *service_request = "ciao\0";
+	int service_request_len = strlen(service_request) + 1;
+	char *service_response;
+	int service_response_len;
 	thread_info worker = *(thread_info*)args;
 	struct timeval start, end;
 	unsigned long passed_millis = 0;
+	int ret = 0;
+	unsigned long token;
 	if(abort_request == 0){
-		printf("sending request id:%d, service:%s\n", worker.id, worker.service_uri);
 		gettimeofday(&start, NULL);
-		int ret = linber_request_service(worker.service_uri, worker.uri_len, REL_DEADLINE, service_params, service_params_len, &service_result, &service_result_len);
+		if(worker.blocking == 1){
+			ret = linber_request_service(worker.service_uri, worker.uri_len, REL_DEADLINE, service_request, service_request_len, &service_response, &service_response_len);
+			printf("sending Blocking request id:%d, service:%s\n", worker.id, worker.service_uri);
+		} else {
+			ret = linber_request_service_no_blocking(worker.service_uri, worker.uri_len, REL_DEADLINE, service_request, service_request_len, &token);
+			if(ret >= 0){
+				printf("sending NON Blocking request id:%d, service:%s\n", worker.id, worker.service_uri);
+				sleep(1);
+				printf("Asking for response request id:%d, service:%s\n", worker.id, worker.service_uri);
+				ret = linber_request_service_get_response(worker.service_uri, worker.uri_len, &service_response, &service_response_len, &token);
+			}
+		}
 		if(ret < 0){
 			printf("request aborted\n");
 		} else {
 			gettimeofday(&end, NULL);
 			passed_millis = (end.tv_sec - start.tv_sec) * 1000 + (end.tv_usec - start.tv_usec) / 1000;
-			printf("Request %d Response: %d %s served in %lu ms\n", worker.id, service_result_len, service_result, passed_millis);
+			printf("Request %d Response: %d %s served in %lu ms\n", worker.id, service_response_len, service_response, passed_millis);
 		}
 	}
 	return NULL;
@@ -84,6 +97,7 @@ int main(int argc,char* argv[]){
 		worker[i].uri_len = uri_len;
 		worker[i].service_uri = service_uri;
 		worker[i].id = i;
+		worker[i].blocking = 0;
 		usleep(1000*(rand()%max_inter_request + 1));
 		int terr = pthread_create(&worker[i].tid, NULL, thread_job, (void*)&worker[i]);
 		if (terr != 0){

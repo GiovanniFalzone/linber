@@ -22,8 +22,6 @@
 #define DEVICE_FILE_NAME		"linber"
 #define DEVICE_FILE_FULL_PATH	"/dev/" DEVICE_FILE_NAME
 
-#define SERVICE_URI_MAX_LEN		50
-
 #define LINBER_IOCTL_NOT_IMPLEMENTED 	-32
 #define LINBER_USER_MEMORY_ERROR		-31
 
@@ -40,6 +38,9 @@
 #define LINBER_REQUEST_ACCEPTED 	1
 #define LINBER_SERVICE_NOT_EXISTS	-3
 
+#define LINBER_REQUEST_INIT			0
+#define LINBER_REQUEST_WAITING		1
+#define LINBER_REQUEST_COMPLETED	2
 
 
 typedef struct linber_service_struct {
@@ -62,6 +63,8 @@ typedef struct linber_service_struct {
 		} destroy_service;
 
 		struct request {
+			int blocking;
+			int request_status;
 			unsigned int rel_deadline;
 			unsigned long *ptr_token;
 			char *service_request;
