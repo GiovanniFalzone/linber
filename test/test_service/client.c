@@ -97,7 +97,11 @@ int main(int argc,char* argv[]){
 		worker[i].uri_len = uri_len;
 		worker[i].service_uri = service_uri;
 		worker[i].id = i;
-		worker[i].blocking = 0;
+		if(i < concurrent_requests*0.5){
+			worker[i].blocking = 0;
+		} else {
+			worker[i].blocking = 1;
+		}
 		usleep(1000*(rand()%max_inter_request + 1));
 		int terr = pthread_create(&worker[i].tid, NULL, thread_job, (void*)&worker[i]);
 		if (terr != 0){
