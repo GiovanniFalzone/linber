@@ -25,8 +25,9 @@
 #define LINBER_IOCTL_NOT_IMPLEMENTED 	-32
 #define LINBER_USER_MEMORY_ERROR		-31
 
-#define LINBER_SERVICE_REGISTRATION_SUCCESS			0
+#define LINBER_SERVICE_REGISTRATION_FAIL			-2
 #define LINBER_SERVICE_REGISTRATION_ALREADY_EXISTS	-1
+#define LINBER_SERVICE_REGISTRATION_SUCCESS			0
 
 #define LINBER_REQUEST_SUCCESS						0
 #define LINBER_ABORT_REQUEST						-1
@@ -50,12 +51,13 @@ typedef struct linber_service_struct {
 		struct registration {
 			unsigned int exec_time;
 			unsigned int max_concurrent_workers;
-			unsigned long *ret_service_token;
+			int *ptr_service_id;
+			unsigned long *ptr_service_token;
 		} registration;
 
 		struct register_worker {
 			unsigned long service_token;
-			unsigned int *ret_worker_id;
+			unsigned int *ptr_worker_id;
 		} register_worker;
 
 		struct destroy_service {
@@ -74,6 +76,7 @@ typedef struct linber_service_struct {
 		} request;
 
 		struct start_job{
+			int service_id;
 			unsigned int worker_id;	// start job
 			unsigned long service_token;
 			unsigned int *ptr_slot_id;
@@ -82,6 +85,7 @@ typedef struct linber_service_struct {
 		} start_job;
 
 		struct end_job{
+			int service_id;
 			unsigned int worker_id;
 			unsigned long service_token;
 			unsigned int slot_id;

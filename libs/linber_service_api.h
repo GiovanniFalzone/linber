@@ -57,14 +57,15 @@ int ioctl_send(unsigned int cmd, void* param){
 }
 
 //------------------------------------------------
-int linber_register_service(char *service_uri, unsigned int uri_len, unsigned int exec_time, unsigned int max_workers, unsigned long *service_token){
+int linber_register_service(char *service_uri, unsigned int uri_len, int *service_id, unsigned int exec_time, unsigned int max_workers, unsigned long *service_token){
 	int ret = 0;
 	linber_service_struct param;
 	param.service_uri = service_uri;
 	param.service_uri_len = uri_len;
 	param.linber_params.registration.exec_time = exec_time;
 	param.linber_params.registration.max_concurrent_workers = max_workers;
-	param.linber_params.registration.ret_service_token = service_token;
+	param.linber_params.registration.ptr_service_id = service_id;
+	param.linber_params.registration.ptr_service_token = service_token;
 	ret = ioctl_send(IOCTL_REGISTER_SERVICE, &param);
 	switch(ret){
 		case 0:
@@ -83,7 +84,7 @@ int linber_register_service_worker(char *service_uri, unsigned int uri_len, unsi
 	linber_service_struct param;
 	param.service_uri = service_uri;
 	param.service_uri_len = uri_len;
-	param.linber_params.register_worker.ret_worker_id = worker_id;
+	param.linber_params.register_worker.ptr_worker_id = worker_id;
 	param.linber_params.register_worker.service_token = service_token;
 	ret = ioctl_send(IOCTL_REGISTER_SERVICE_WORKER, &param);
 	switch(ret){
@@ -186,12 +187,13 @@ int linber_request_service_get_response(char *service_uri, unsigned int uri_len,
 }
 
 
-int linber_start_job_service(char *service_uri, unsigned int uri_len, unsigned long service_token, unsigned int worker_id,\
+int linber_start_job_service(char *service_uri, unsigned int uri_len, int service_id, unsigned long service_token, unsigned int worker_id,\
 								 unsigned int *slot_id, char **service_request, int *service_request_len){
 	int ret = 0;
 	linber_service_struct param;
 	param.service_uri = service_uri;
 	param.service_uri_len = uri_len;
+	param.linber_params.start_job.service_id = service_id;
 	param.linber_params.start_job.worker_id = worker_id;
 	param.linber_params.start_job.service_token = service_token;
 	param.linber_params.start_job.ptr_slot_id = slot_id;
@@ -216,12 +218,13 @@ int linber_start_job_service(char *service_uri, unsigned int uri_len, unsigned l
 	return ret;
 }
 
-int linber_end_job_service(char *service_uri, unsigned int uri_len, unsigned long service_token, unsigned int worker_id,\
+int linber_end_job_service(char *service_uri, unsigned int uri_len, int service_id, unsigned long service_token, unsigned int worker_id,\
 								 unsigned int slot_id, char *service_response, int service_response_len){
 	int ret = 0;
 	linber_service_struct param;
 	param.service_uri = service_uri;
 	param.service_uri_len = uri_len;
+	param.linber_params.end_job.service_id = service_id;
 	param.linber_params.end_job.worker_id = worker_id;
 	param.linber_params.end_job.service_token = service_token;
 	param.linber_params.end_job.slot_id = slot_id;

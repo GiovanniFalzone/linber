@@ -9,6 +9,7 @@
 
 class linberServiceWorker {
 	char *service_uri;
+	int service_id;
 	int uri_len;
 	unsigned long service_token;
 	unsigned int exec_time;
@@ -25,13 +26,14 @@ protected:
 		int response_len;
 
 public:
-	linberServiceWorker(char * service_uri, unsigned long service_token){
+	linberServiceWorker(char * service_uri, int service_id, unsigned long service_token){
+		this->service_id = service_id;
+		this->service_token = service_token;
 		this->uri_len = strlen(service_uri) + 1;
 		this->service_uri = (char*)malloc(this->uri_len+1);
 		this->service_uri[this->uri_len-1] = '\0';
 		this->service_uri[this->uri_len] = '\0';
 		strcpy(this->service_uri, service_uri);
-		this->service_token = service_token;
 		this->job_num = 0;
 
 		this->request = NULL;
@@ -62,7 +64,7 @@ public:
 		int ret;
 		linber_init();
 		while(worker_alive){
-			ret = linber_start_job_service(service_uri, uri_len, service_token, worker_id, &slot_id, &request, &request_len);
+			ret = linber_start_job_service(service_uri, uri_len, service_id, service_token, worker_id, &slot_id, &request, &request_len);
 
 			if(ret < 0){
 				printf("Job aborted ret %i\n", ret);
@@ -76,7 +78,7 @@ public:
 			if(request != NULL){
 				free(request);
 			}
-			ret = linber_end_job_service(service_uri, uri_len, service_token, worker_id, slot_id, response, response_len);
+			ret = linber_end_job_service(service_uri, uri_len, service_id, service_token, worker_id, slot_id, response, response_len);
 		}
 	}
 
