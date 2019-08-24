@@ -17,18 +17,16 @@ The module uses 0x20 as magic number and [0-6] as sequence number to register th
 	sudo apt-get install build-essential make libprotobuf-dev protobuf-compiler
 
 ## Execution
-	./main.sh makeall										// compile all inside driver/ and test/
-	./main.sh insmod										// load the module in the kernel
-	./test/test_service/server org.service 4 10				// 4 workers, service execution time 10 milliseconds
-	./test/test_service/client org.service 32 10			// 32 concurrent request (16 blocking, 16 non blocking), inter-request delay = random in [0, 10]
-	./test/linber_monitor/linber_monitor 100 				// shot the system' status every 100 milliseconds
-	./main.sh rmmod											// unload the module
+	./main.sh makeall	// compile all inside driver/ and test/
+	./main.sh insmod	// load the module in the kernel
+	./test/test_service/server org.service 4 10		// 4 workers, service execution time 10 milliseconds
+	./test/test_service/client org.service 32 10	// 32 concurrent request (16 blocking, 16 non blocking), inter-request delay = random in [0, 10]
+	./test/linber_monitor/linber_monitor 100 	// shot the system' status every 100 milliseconds
+	./main.sh rmmod		// unload the module
 
-![Linber Component view](/img/Linber_component_view.png)
-![Linber Stack](/img/Linber_stack.png)
 
 ## module test
-	./test/test_service/server org.service 1 0						// service with 1 worker and 0 execution time
+	./test/test_service/server org.service 1 0	// service with 1 worker and 0 execution time
 	./test/test_service/client_efficiency_test org.service 1 15		// run tests starting with a request of 1 byte and double for 15 times
 
 In the x-axis is reported the size of each request used to test the framework, in the y-axis the microseconds calculated as the minimum one over 1000 requests with the same request.
@@ -36,6 +34,9 @@ The service server used just one worker and an execution time equal to 0, the re
 ![Linber Sequence Diagram](/img/test_exec_time.png)
 
 ## Linber API
+![Linber Component view](/img/Linber_component_view.png)
+![Linber Stack](/img/Linber_stack.png)
+
 ### Create Service
 
 ### Register Worker
