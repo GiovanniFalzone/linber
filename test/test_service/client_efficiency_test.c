@@ -21,7 +21,6 @@ int get_service_time(unsigned int req_size, int blocking, unsigned int *micros){
 	int ret = 0;
 	unsigned long token;
 
-printf("pre malloc\n");
 	service_request = malloc(req_size + 1);
 	if(service_request == NULL){
 		printf("no memory");
@@ -32,7 +31,6 @@ printf("pre malloc\n");
 	service_request_len = req_size + 1;
 
 
-printf("pre request\n");
 	for(int i=0; i<1000; i++){
 		gettimeofday(&start, NULL);
 		if(blocking == 1){
@@ -40,11 +38,9 @@ printf("pre request\n");
 		} else {
 			ret = linber_request_service_no_blocking(service_uri, uri_len, 1, service_request, service_request_len, &token);
 			if(ret >= 0){
-printf("pre request 2\n");
 				ret = linber_request_service_get_response(service_uri, uri_len, &service_response, &service_response_len, &token);
 			}
 		}
-printf("post request\n");
 		if(ret < 0){
 			printf("request aborted\n");
 		} else {
@@ -57,9 +53,7 @@ printf("post request\n");
 	}
 	*micros = min_time_micros;
 	free(service_request);
-	if(ret >= 0){
-		free(service_response);
-	}
+	free(service_response);
 	return 0;
 }
 
@@ -92,7 +86,6 @@ int main(int argc,char* argv[]){
 	unsigned int size=min_size;
 	int iterations = 10;
 	unsigned int microsec;
-	unsigned int mat[iterations][2];	//size, time
 
 	service_uri = DEFAULT_SERVICE_URI;
 	uri_len = strlen(service_uri);
@@ -113,6 +106,9 @@ int main(int argc,char* argv[]){
 			iterations = n;
 		}
 	}
+
+	size=min_size;
+	unsigned int mat[iterations][2];	//size, time
 
 	linber_init();
 	printf("Running efficiency test on service %s\n", service_uri);
