@@ -65,9 +65,6 @@ class calculator_service : public linberServiceWorker{
 		float a;
 		float b;
 		float result;
-		if(response != NULL){
-			free(response);
-		}
 
 		cout << "executing job" << endl;
 		request_msg.ParseFromArray(request, request_len);

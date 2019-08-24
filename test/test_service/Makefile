@@ -1,14 +1,14 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -pedantic -I.
 LDLIBS = -pthread
-TARGET = server client
+TARGET = server client client_efficiency_test
 DEP_LIBS = ../../libs/linber_ioctl.h
 DEP_LIBS += ../../libs/linber_service_api.h
 
 .PHONY:
 all: $(TARGET)
 
-%.o: %.c $(DEP_LIBS)
+%.o: %.c
 	$(CC) -c -o $@ $< $(CFLAGS) $(LDLIBS)
 
 .PHONY:

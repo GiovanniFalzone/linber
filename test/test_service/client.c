@@ -62,6 +62,7 @@ void *thread_job(void *args){
 			passed_millis = (end.tv_sec - start.tv_sec) * 1000 + (end.tv_usec - start.tv_usec) / 1000;
 			printf("Request %d Response: %d %s served in %lu ms\n", worker.id, service_response_len, service_response, passed_millis);
 		}
+		free(service_response);
 	}
 	return NULL;
 }

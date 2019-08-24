@@ -10,13 +10,12 @@
 #include "../../libs/linber_service_api.h"
 
 #define DEFAULT_SERVICE_URI	"org.service\0"
-
-#define DEFAULT_JOB_EXEC_TIME	100	//ms
-
+#define DEFAULT_JOB_EXEC_TIME	1	//ms
 #define DEFAULT_MAX_CONCURRENT_WORKERS		4
-#define DAFAULT_SPARE_WORKER				2
 
-char *service_uri = DEFAULT_SERVICE_URI;
+//#define DEBUG
+
+char *service_uri;
 int uri_len;
 int service_id;
 unsigned long service_token;
@@ -42,8 +41,6 @@ void *thread_job(void *args){
 	unsigned int worker_id, slot_id;
 	char *service_request, *service_response;
 	thread_info worker = *(thread_info*)args;
-	service_response = "bye\0";
-	service_response_len = strlen(service_response) + 1;
 
 	if(linber_register_service_worker(service_uri, uri_len,worker.service_token, &worker_id) == 0){
 		printf("started_thread id:%d, service:%s\n", worker_id, service_uri);
@@ -53,16 +50,21 @@ void *thread_job(void *args){
 				break;
 			}
 			if(ret != LINBER_SERVICE_SKIP_JOB){
-				printf("thread id:%d job#:%d, serving request (%s)\n", worker_id, job_num++, service_request);
+				#ifdef DEBUG
+					printf("thread id:%d job#:%d, serving request\n", worker_id, job_num++);
+				#endif
 				struct timeval start, end;
 				gettimeofday(&start, NULL);
 				unsigned long passed_millis = 0;
 				do{
 					gettimeofday(&end, NULL);
-					passed_millis = (end.tv_sec - start.tv_sec) * 1000 + (end.tv_usec - start.tv_usec) / 1000;
+					passed_millis = (end.tv_usec - start.tv_usec) * 0.001;
 				} while(passed_millis < worker.exec_time);
 			}
-			ret = linber_end_job_service(service_uri, uri_len, service_id, worker.service_token, worker_id, slot_id, service_response, service_response_len);
+			service_response_len = service_request_len;
+			service_response = malloc(service_response_len);
+			memcpy(service_response, service_request, service_response_len);
+			ret = linber_end_job_service(service_uri, uri_len, service_id, worker.service_token, worker_id, slot_id, service_request, service_response, service_response_len);
 		}
 	}
 	printf("Thread %d died\n", worker_id);
@@ -78,6 +80,9 @@ int main(int argc,char* argv[]){
 	if(argc >= 2){
 		service_uri = malloc(strlen(argv[1])+1);
 		strcpy(service_uri, argv[1]);
+	} else {
+		service_uri = malloc(strlen(DEFAULT_SERVICE_URI)+1);
+		strcpy(service_uri, DEFAULT_SERVICE_URI);
 	}
 
 	if(argc >= 3){
@@ -89,7 +94,7 @@ int main(int argc,char* argv[]){
 
 	if(argc >= 4){
 		int n = atoi(argv[3]);
-		if(n > 0){
+		if(n >= 0){
 			job_exec_time = n;
 		}
 	}
@@ -101,7 +106,7 @@ int main(int argc,char* argv[]){
 	linber_init();
 	linber_register_service(service_uri, uri_len, &service_id, job_exec_time, max_concurrent_workers, &service_token);
 	printf("registered service, id:%i, starting thread pool\n", service_id);
-	int workers_num = max_concurrent_workers + DAFAULT_SPARE_WORKER;
+	int workers_num = max_concurrent_workers;
 	thread_info worker[workers_num];
 	for(int i=0; i<workers_num; i++){
 		worker[i].service_token = service_token;
@@ -118,6 +123,7 @@ int main(int argc,char* argv[]){
 	}
 
 	linber_exit();
+	free(service_uri);
 }
 
 
