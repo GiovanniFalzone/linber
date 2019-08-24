@@ -108,11 +108,12 @@ int main(int argc,char* argv[]){
 	}
 
 	size=min_size;
+	iterations++;
 	unsigned int mat[iterations][2];	//size, time
 
 	linber_init();
 	printf("Running efficiency test on service %s\n", service_uri);
-	for(int i=0; i<=iterations; i++, size = size << 1){
+	for(int i=0; i<iterations; i++, size = size << 1){
 		get_service_time(size, 1, &microsec);
 		mat[i][0] = size;
 		mat[i][1] = microsec;
