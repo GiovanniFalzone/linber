@@ -219,7 +219,8 @@ int linber_start_job_service(char *service_uri, unsigned int uri_len, int servic
 }
 
 int linber_end_job_service(char *service_uri, unsigned int uri_len, int service_id, unsigned long service_token, unsigned int worker_id,\
-								 unsigned int slot_id, char *service_response, int service_response_len){
+							unsigned int slot_id,
+							char *service_request, char *service_response, int service_response_len){
 	int ret = 0;
 	linber_service_struct param;
 	param.service_uri = service_uri;
@@ -242,6 +243,8 @@ int linber_end_job_service(char *service_uri, unsigned int uri_len, int service_
 			printf("EndJob: Skip job, Spurious wakeup for workerd %d\n", worker_id);
 			break;
 	}
+	free(service_request);
+	free(service_response);
 	return ret;
 }
 

@@ -75,10 +75,7 @@ public:
 				execute_job();
 			}
 
-			if(request != NULL){
-				free(request);
-			}
-			ret = linber_end_job_service(service_uri, uri_len, service_id, service_token, worker_id, slot_id, response, response_len);
+			ret = linber_end_job_service(service_uri, uri_len, service_id, service_token, worker_id, slot_id, request, response, response_len);
 		}
 	}
 
