@@ -28,11 +28,11 @@ gcc version 7.4.0						\
 ## module test
 In the x-axis is reported the size of each request used to test the framework, in the y-axis the microseconds calculated as the minimum one over 1000 requests with the same request.
 The service server used just one worker and an execution time equal to 0, the response is a copy of the request.
-![Linber Sequence Diagram](/img/Linber_sequence.png)
+![Linber Sequence Diagram](/img/test_exec_time.png)
 
 ## Linber API
 ### Create Service
-	
+
 ### Register Worker
 
 ### Worker Start Job
