@@ -11,7 +11,7 @@ Kernel version: 5.0.0-23-generic	\
 gcc version 7.4.0
 
 ### Warning
-The module uses 0x20 as magic number and [0-6] as sequence number to register the IOCTL operations. (https://elixir.bootlin.com/linux/latest/source/Documentation/ioctl/ioctl-number.txt)
+The module uses 0x20 as magic number and [0-10] as sequence number to register the IOCTL operations. (https://elixir.bootlin.com/linux/latest/source/Documentation/ioctl/ioctl-number.txt)
 
 ### dependencies
 	sudo apt-get install build-essential make libprotobuf-dev protobuf-compiler
