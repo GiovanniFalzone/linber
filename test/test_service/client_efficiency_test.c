@@ -21,6 +21,7 @@ int get_service_time(unsigned int req_size, int blocking, unsigned int *micros){
 	int ret = 0;
 	unsigned long token;
 
+printf("pre malloc\n");
 	service_request = malloc(req_size + 1);
 	if(service_request == NULL){
 		printf("no memory");
@@ -30,6 +31,8 @@ int get_service_time(unsigned int req_size, int blocking, unsigned int *micros){
 	service_request[req_size] = '\0';
 	service_request_len = req_size + 1;
 
+
+printf("pre request\n");
 	for(int i=0; i<1000; i++){
 		gettimeofday(&start, NULL);
 		if(blocking == 1){
@@ -37,9 +40,11 @@ int get_service_time(unsigned int req_size, int blocking, unsigned int *micros){
 		} else {
 			ret = linber_request_service_no_blocking(service_uri, uri_len, 1, service_request, service_request_len, &token);
 			if(ret >= 0){
+printf("pre request 2\n");
 				ret = linber_request_service_get_response(service_uri, uri_len, &service_response, &service_response_len, &token);
 			}
 		}
+printf("post request\n");
 		if(ret < 0){
 			printf("request aborted\n");
 		} else {
