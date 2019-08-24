@@ -2,16 +2,16 @@
 cmd="${1}" 
 case ${cmd} in 
 	makemodule)
-		sh -c 'cd driver && make clean && make all'
+		sh -c 'cd driver && make all'
 		;;
 
 	maketest)
-		sh -c 'cd test && make clean && make all'
+		sh -c 'cd test && make all'
 		;;
 
 	makeall)
-		sh -c 'cd driver && make clean && make all'
-		sh -c 'cd test && make clean && make all'
+		sh -c 'cd driver && make all'
+		sh -c 'cd test && make all'
 		;;  
 
 	clean)
