@@ -31,10 +31,10 @@ The module uses 0x20 as magic number and [0-6] as sequence number to register th
 
 In the x-axis is reported the size of each request used to test the framework, in the y-axis the microseconds calculated as the minimum one over 1000 requests with the same request.
 The service server used just one worker and an execution time equal to 0, the response is a copy of the request.
-The following data have been computed on a:
-	Intel(R) Core(TM) i7-8550U CPU running @[3.8, 4.00]Ghz
-	L1d cache: 32K L1i cache: 32K
-	L2 cache: 256K
+The following data have been computed on a:\
+	Intel(R) Core(TM) i7-8550U CPU running @[3.8, 4.00]Ghz \
+	L1d cache: 32K L1i cache: 32K \
+	L2 cache: 256K \
 	L3 cache: 8192K
 
 ![Linber Sequence Diagram](/img/exec_time_1b_to_64Kb.png)
