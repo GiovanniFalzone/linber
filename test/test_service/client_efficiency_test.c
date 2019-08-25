@@ -31,7 +31,7 @@ int get_service_time(unsigned int req_size, int blocking, unsigned int *micros){
 	service_request_len = req_size + 1;
 
 
-	for(int i=0; i<1000; i++){
+	for(int i=0; i<100; i++){
 		gettimeofday(&start, NULL);
 		if(blocking == 1){
 			ret = linber_request_service(service_uri, uri_len, 1, service_request, service_request_len, &service_response, &service_response_len);
@@ -114,6 +114,10 @@ int main(int argc,char* argv[]){
 	linber_init();
 	printf("Running efficiency test on service %s\n", service_uri);
 	for(int i=0; i<iterations; i++, size = size << 1){
+		if(size >= 1<<22){	// kmalloc can allocate maximum 4Mb
+			printf("stop iteration kmalloc can allocate maximum 4Mb\n");
+			break;
+		}
 		get_service_time(size, 1, &microsec);
 		mat[i][0] = size;
 		mat[i][1] = microsec;
