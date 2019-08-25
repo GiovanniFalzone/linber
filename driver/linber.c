@@ -199,6 +199,12 @@ static void destroy_service(ServiceNode *ser_node){
 		destroy_request(req_node);
 	}
 	system_requests_count -= i;
+	
+	list_for_each_entry_safe(req_node, next, &ser_node->Completed_RequestsHead, list){
+		list_del(&req_node->list);
+		destroy_request(req_node);
+	}
+
 	for(i=0; i<ser_node->count_workers; i++){
 		up(&ser_node->Workers_sem);
 	}
