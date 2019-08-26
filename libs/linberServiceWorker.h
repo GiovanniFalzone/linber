@@ -9,6 +9,7 @@
 
 class linberServiceWorker {
 	char *service_uri;
+	char *file_str;
 	int service_id;
 	int uri_len;
 	unsigned long service_token;
@@ -39,7 +40,7 @@ public:
 		this->request = NULL;
 		this->response = NULL;
 
-		if(linber_register_service_worker(service_uri, uri_len, service_token, &worker_id) == 0){
+		if(linber_register_service_worker(service_uri, uri_len, service_token, &worker_id, &file_str) == 0){
 			printf("Started Worker id:%d, service:%s token:%lu\n", worker_id, service_uri, service_token);
 		}
 		this->worker_alive = true;

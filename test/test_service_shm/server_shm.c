@@ -13,7 +13,7 @@
 #define DEFAULT_JOB_EXEC_TIME	1	//ms
 #define DEFAULT_MAX_CONCURRENT_WORKERS		4
 
-#define DEBUG
+//#define DEBUG
 
 char *service_uri;
 int uri_len;
@@ -37,21 +37,22 @@ void sig_handler(int signo){
 }
 
 void *thread_job(void *args){
-	int ret, job_num = 1, request_len, service_response_len;
+	int ret, job_num = 1, service_request_len, service_response_len;
 	unsigned int worker_id, slot_id;
-	char *request, *service_response, *file_str;
+	char *service_request, *service_response, *file_str;
 	thread_info worker = *(thread_info*)args;
 
 	if(linber_register_service_worker(service_uri, uri_len,worker.service_token, &worker_id, &file_str) == 0){
+		printf("new service worker file %s\n", file_str);
 		printf("started_thread id:%d, service:%s\n", worker_id, service_uri);
 		while(1){
-			ret = linber_start_job_service(service_uri, uri_len, service_id, worker.service_token, worker_id, &slot_id, &request, &request_len);
+			ret = linber_start_job_service(service_uri, uri_len, service_id, worker.service_token, worker_id, &slot_id, &service_request, &service_request_len);
 			if(ret < 0){
 				break;
 			}
 			if(ret != LINBER_SERVICE_SKIP_JOB){
 				#ifdef DEBUG
-					printf("thread id:%d job#:%d, serving request, %s %d\n", worker_id, job_num++, request, request_len);
+					printf("thread id:%d job#:%d, serving request\n", worker_id, job_num++);
 				#endif
 				struct timeval start, end;
 				gettimeofday(&start, NULL);
@@ -61,10 +62,10 @@ void *thread_job(void *args){
 					passed_millis = (end.tv_usec - start.tv_usec) * 0.001;
 				} while(passed_millis < worker.exec_time);
 			}
-			service_response_len = request_len;
+			service_response_len = service_request_len;
 			service_response = malloc(service_response_len);
-			memcpy(service_response, request, service_response_len);
-			ret = linber_end_job_service(service_uri, uri_len, service_id, worker.service_token, worker_id, slot_id, request, service_response, service_response_len);
+			memcpy(service_response, service_request, service_response_len);
+			ret = linber_end_job_service_shm(service_uri, uri_len, service_id, worker.service_token, worker_id, slot_id, service_request, service_response, service_response_len, file_str);
 		}
 	}
 	free(file_str);

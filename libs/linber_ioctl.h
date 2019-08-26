@@ -1,7 +1,6 @@
 #ifndef LINBER_IOCTL_H
 #define LINBER_IOCTL_H
 
-#include <linux/ioctl.h>
 #define MAGIC_NUM		0x20
 #define SEQ_NUM			0
 
@@ -43,11 +42,16 @@
 #define LINBER_REQUEST_WAITING		1
 #define LINBER_REQUEST_COMPLETED	2
 
+#define FALSE	0
+#define TRUE	1
+
+typedef int boolean;
+
 
 typedef struct linber_service_struct {
 	char *service_uri;
 	unsigned int service_uri_len;
-	union linber_params{
+	union op_params{
 		struct registration {
 			unsigned int exec_time;
 			unsigned int max_concurrent_workers;
@@ -65,14 +69,23 @@ typedef struct linber_service_struct {
 		} destroy_service;
 
 		struct request {
-			int blocking;
-			int request_status;
+			boolean blocking;
+			boolean shm_mode;
+			int status;
 			unsigned int rel_deadline;
 			unsigned long *ptr_token;
-			char *service_request;
-			int service_request_len;
-			char *ptr_service_response;
-			int *ptr_service_response_len;
+			int request_len;
+			int *ptr_response_len;
+			union {
+				struct {
+					char *request;
+					char *ptr_response;
+				} mem;
+				struct {
+					key_t shm_request_key;
+					key_t *ptr_shm_response_key;
+				} shm;
+			} data;
 		} request;
 
 		struct start_job{
@@ -80,8 +93,8 @@ typedef struct linber_service_struct {
 			unsigned int worker_id;	// start job
 			unsigned long service_token;
 			unsigned int *ptr_slot_id;
-			char *ptr_service_request;
-			int *ptr_service_request_len;
+			char *ptr_request;
+			int *ptr_request_len;
 		} start_job;
 
 		struct end_job{
@@ -89,10 +102,11 @@ typedef struct linber_service_struct {
 			unsigned int worker_id;
 			unsigned long service_token;
 			unsigned int slot_id;
-			char *service_response;
-			int service_response_len;
+			char *response;
+			int response_len;
+			key_t shm_response_key;
 		} end_job;
-	} linber_params;
+	} op_params;
 } linber_service_struct;
 
 typedef struct service_status{
