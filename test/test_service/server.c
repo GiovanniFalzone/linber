@@ -67,7 +67,7 @@ void *thread_job(void *args){
 			ret = linber_end_job_service(service_uri, uri_len, service_id, worker.service_token, worker_id, slot_id, request, service_response, service_response_len);
 		}
 	}
-	free(file_str);
+	linber_destroy_worker(file_str);
 	printf("Thread %d died\n", worker_id);
 	return NULL;
 }

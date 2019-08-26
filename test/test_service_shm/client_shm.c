@@ -103,10 +103,6 @@ int main(int argc,char* argv[]){
 			worker[i].blocking = 1;
 		}
 
-//----------------------------------
-		worker[i].blocking = 1;
-//----------------------------------
-
 		usleep(1000*(rand()%max_inter_request + 1));
 		int terr = pthread_create(&worker[i].tid, NULL, thread_job, (void*)&worker[i]);
 		if (terr != 0){

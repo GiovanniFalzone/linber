@@ -55,15 +55,13 @@ typedef struct RequestNode{
 	bool response_shm_mode;
 	bool request_shm_mode;
 	union {
-		struct {
-			char *request;
-			char *response;
-		} mem;
-		struct {
-			key_t request_key;
-			key_t response_key;
-		} shm;
-	}data;
+		char * data;
+		key_t shm_key;
+	} request;
+	union {
+		char * data;
+		key_t shm_key;
+	} response;
 }RequestNode;
 
 typedef struct request_slot{
@@ -286,9 +284,11 @@ static RequestNode* enqueue_request_for_service(ServiceNode *ser_node, char *req
 	req_node = create_Request();
 	if(req_node != NULL){
 		if(shm_mode){
-			req_node->data.shm.request_key = req_key;
+			req_node->request_shm_mode = true;
+			req_node->request.shm_key = req_key;
 		} else {
-			req_node->data.mem.request = request;
+			req_node->request_shm_mode = false;
+			req_node->request.data = request;
 		}
 		req_node->request_len = request_len;
 
@@ -337,8 +337,8 @@ static RequestNode* get_request(ServiceNode* ser_node){
 			ser_node->num_requests--;
 			ser_node->serving_time -= ser_node->exec_time;
 			if(!req_node->request_accepted){
-				kfree(req_node->data.mem.request);
-				kfree(req_node->data.mem.response);
+				kfree(req_node->request.data);
+				kfree(req_node->response.data);
 				kfree(req_node);
 				mutex_unlock(&ser_node->service_mutex);
 				return NULL;
@@ -499,7 +499,7 @@ static int linber_request_service(linber_service_struct *obj){
 	if(ser_node != NULL && (!ser_node->destroy_me)){
 		status = obj->op_params.request.status;
 		request_len = obj->op_params.request.request_len;
-		shm_mode = (obj->op_params.request.shm_mode == 1);
+		shm_mode = (obj->op_params.request.request_shm_mode == 1);
 		blocking = (obj->op_params.request.blocking == 1);
 
 		//----------------------init-----------------------
@@ -507,9 +507,9 @@ static int linber_request_service(linber_service_struct *obj){
 			service_load_balancing(ser_node);
 			if(!shm_mode){
 				request = kmalloc(request_len, GFP_KERNEL);
-				checkMemoryError(copy_from_user(request, obj->op_params.request.data.mem.request, request_len));
+				checkMemoryError(copy_from_user(request, obj->op_params.request.request.data, request_len));
 			} else {
-				request_key = obj->op_params.request.data.shm.shm_request_key;
+				request_key = obj->op_params.request.request.shm_key;
 			}
 			req_node = enqueue_request_for_service(ser_node, request, request_len, blocking, shm_mode, request_key);
 			if(req_node == NULL){
@@ -537,9 +537,7 @@ static int linber_request_service(linber_service_struct *obj){
 				ret = req_node->result_cmd;
 				if(ret == LINBER_REQUEST_SUCCESS){	// copy response
 					checkMemoryError(put_user(req_node->response_len, obj->op_params.request.ptr_response_len));
-					if(shm_mode){	// response in shared memory
-						checkMemoryError(put_user(req_node->data.shm.response_key, obj->op_params.request.data.shm.ptr_shm_response_key));
-					}
+					checkMemoryError(put_user(req_node->response_shm_mode, obj->op_params.request.ptr_response_shm_mode));
 				}
 			}
 		}
@@ -561,11 +559,17 @@ static int linber_request_service_get_response(linber_service_struct *obj){
 		req_node = get_Completed_Request(ser_node, token);
 		if(req_node != NULL){
 			ret = req_node->result_cmd;
-			checkMemoryError(copy_to_user(obj->op_params.request.data.mem.ptr_response, req_node->data.mem.response, req_node->response_len));
-			kfree(req_node->data.mem.request);
-			kfree(req_node->data.mem.response);
-			kfree(req_node);
+			if(req_node->response_shm_mode){	// response in shared memory
+				checkMemoryError(put_user(req_node->response.shm_key, obj->op_params.request.ptr_shm_response_key));
 			} else {
+				checkMemoryError(copy_to_user(obj->op_params.request.ptr_response, req_node->response.data, req_node->response_len));
+				kfree(req_node->response.data);
+			}
+			if(!req_node->request_shm_mode){
+				kfree(req_node->request.data);
+			}
+			kfree(req_node);
+		} else {
 			ret = LINBER_REQUEST_FAILED;
 		}
 	} else {
@@ -616,6 +620,10 @@ static int linber_Start_Job(linber_service_struct *obj){
 		} else {
 			checkMemoryError(put_user(slot_id, obj->op_params.start_job.ptr_slot_id));
 			checkMemoryError(put_user(req_node->request_len, obj->op_params.start_job.ptr_request_len));
+			checkMemoryError(put_user(req_node->request_shm_mode, obj->op_params.start_job.ptr_request_shm_mode));
+			if(req_node->request_shm_mode){
+				checkMemoryError(put_user(req_node->request.shm_key, obj->op_params.start_job.data.ptr_request_key));
+			}
 		}
 	} else {
 		decrease_workers(ser_node);
@@ -651,7 +659,7 @@ static int linber_Start_Job_get_request(linber_service_struct *obj){
 			return LINBER_SERVICE_SKIP_JOB;
 		} else {
 			// pass parameters to worker and exec job
-			checkMemoryError(copy_to_user(obj->op_params.start_job.ptr_request, req_node->data.mem.request, req_node->request_len));
+			checkMemoryError(copy_to_user(obj->op_params.start_job.data.ptr_request, req_node->request.data, req_node->request_len));
 		}
 	} else {
 		decrease_workers(ser_node);
@@ -683,11 +691,12 @@ static int linber_End_Job(linber_service_struct *obj){
 					// copy service result
 
 					req_node->response_len = obj->op_params.end_job.response_len;
-					if(obj->op_params.end_job.shm_response_key != -1){	// use shared memory
-						req_node->data.shm.response_key = obj->op_params.end_job.shm_response_key;
+					req_node->response_shm_mode = (obj->op_params.end_job.response_shm_mode == 1);
+					if(req_node->response_shm_mode){	// use shared memory
+						req_node->response.shm_key = obj->op_params.end_job.response.shm_key;
 					} else {
-						req_node->data.mem.response = kmalloc(req_node->response_len, GFP_KERNEL);
-						checkMemoryError(copy_from_user(req_node->data.mem.response, obj->op_params.end_job.response, req_node->response_len));
+						req_node->response.data = kmalloc(req_node->response_len, GFP_KERNEL);
+						checkMemoryError(copy_from_user(req_node->response.data, obj->op_params.end_job.response.data, req_node->response_len));
 					}
 					enqueue_request_completed(ser_node, req_node);
 					up(&req_node->Request_sem);	// end job

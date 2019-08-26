@@ -13,7 +13,7 @@
 #define DEFAULT_JOB_EXEC_TIME	1	//ms
 #define DEFAULT_MAX_CONCURRENT_WORKERS		4
 
-//#define DEBUG
+#define DEBUG
 
 char *service_uri;
 int uri_len;
@@ -63,12 +63,12 @@ void *thread_job(void *args){
 				} while(passed_millis < worker.exec_time);
 			}
 			service_response_len = service_request_len;
-			service_response = malloc(service_response_len);
-			memcpy(service_response, service_request, service_response_len);
+//			service_response = malloc(service_response_len);
+//			memcpy(service_response, service_request, service_response_len);
 			ret = linber_end_job_service_shm(service_uri, uri_len, service_id, worker.service_token, worker_id, slot_id, service_request, service_response, service_response_len, file_str);
 		}
 	}
-	free(file_str);
+	linber_destroy_worker(file_str);
 	printf("Thread %d died\n", worker_id);
 	return NULL;
 }

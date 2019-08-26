@@ -70,22 +70,19 @@ typedef struct linber_service_struct {
 
 		struct request {
 			boolean blocking;
-			boolean shm_mode;
+			boolean request_shm_mode;
+			boolean *ptr_response_shm_mode;
 			int status;
 			unsigned int rel_deadline;
 			unsigned long *ptr_token;
 			int request_len;
 			int *ptr_response_len;
 			union {
-				struct {
-					char *request;
-					char *ptr_response;
-				} mem;
-				struct {
-					key_t shm_request_key;
-					key_t *ptr_shm_response_key;
-				} shm;
-			} data;
+				char *data;
+				key_t shm_key;
+			} request;
+			char *ptr_response;
+			key_t *ptr_shm_response_key;
 		} request;
 
 		struct start_job{
@@ -93,8 +90,12 @@ typedef struct linber_service_struct {
 			unsigned int worker_id;	// start job
 			unsigned long service_token;
 			unsigned int *ptr_slot_id;
-			char *ptr_request;
 			int *ptr_request_len;
+			boolean *ptr_request_shm_mode;
+			union {
+				char *ptr_request;
+				key_t *ptr_request_key;
+			} data;
 		} start_job;
 
 		struct end_job{
@@ -102,9 +103,12 @@ typedef struct linber_service_struct {
 			unsigned int worker_id;
 			unsigned long service_token;
 			unsigned int slot_id;
-			char *response;
 			int response_len;
-			key_t shm_response_key;
+			boolean response_shm_mode;
+			union {
+				char *data;
+				key_t shm_key;
+			} response;
 		} end_job;
 	} op_params;
 } linber_service_struct;
