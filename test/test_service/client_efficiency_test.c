@@ -12,33 +12,40 @@ char *service_uri;
 int uri_len;
 
 int get_service_time(unsigned int req_size, int blocking, unsigned int *micros){
-	char *service_request;
-	int service_request_len;
-	char *service_response;
-	int service_response_len;
+	char *request;
+	int request_len;
+	char *response;
+	boolean response_shm_mode = FALSE;
+	int response_len;
 	struct timeval start, end;
 	unsigned long passed_micros = 0, min_time_micros = 1000000;
 	int ret = 0;
 	unsigned long token;
 
-	service_request = malloc(req_size + 1);
-	if(service_request == NULL){
+	request = malloc(req_size + 1);
+	if(request == NULL){
 		printf("no memory");
 		return -1;
 	}
-	memset(service_request, 'X', req_size);
-	service_request[req_size] = '\0';
-	service_request_len = req_size + 1;
+	memset(request, 'X', req_size);
+	request[req_size] = '\0';
+	request_len = req_size + 1;
 
 
 	for(int i=0; i<100; i++){
 		gettimeofday(&start, NULL);
 		if(blocking == 1){
-			ret = linber_request_service(service_uri, uri_len, 1, service_request, service_request_len, &service_response, &service_response_len);
+			ret = linber_request_service(	service_uri, uri_len,							\
+											1, request, request_len,						\
+											&response, &response_len, &response_shm_mode);
 		} else {
-			ret = linber_request_service_no_blocking(service_uri, uri_len, 1, service_request, service_request_len, &token);
+			ret = linber_request_service_no_blocking(	service_uri, uri_len,		\
+														1, request, request_len,	\
+														&token);
 			if(ret >= 0){
-				ret = linber_request_service_get_response(service_uri, uri_len, &service_response, &service_response_len, &token);
+				ret = linber_request_service_get_response(	service_uri, uri_len,							\
+															&response, &response_len, &response_shm_mode,	\
+															&token);
 			}
 		}
 		if(ret < 0){
@@ -52,8 +59,9 @@ int get_service_time(unsigned int req_size, int blocking, unsigned int *micros){
 		}
 	}
 	*micros = min_time_micros;
-	free(service_request);
-	free(service_response);
+
+	linber_request_service_clean(request, FALSE, response, response_shm_mode);
+
 	return 0;
 }
 

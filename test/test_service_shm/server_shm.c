@@ -15,6 +15,8 @@
 
 #define DEBUG
 
+#define FIXED_SHM_RESPONSE_LEN		1024
+
 char *service_uri;
 int uri_len;
 int service_id;
@@ -37,16 +39,25 @@ void sig_handler(int signo){
 }
 
 void *thread_job(void *args){
-	int ret, job_num = 1, service_request_len, service_response_len;
+	int ret, job_num = 1, request_len, response_len;
 	unsigned int worker_id, slot_id;
-	char *service_request, *service_response, *file_str;
+	char *request, *response, *file_str;
+	key_t response_key;
+	boolean request_shm;
 	thread_info worker = *(thread_info*)args;
 
 	if(linber_register_service_worker(service_uri, uri_len,worker.service_token, &worker_id, &file_str) == 0){
 		printf("new service worker file %s\n", file_str);
 		printf("started_thread id:%d, service:%s\n", worker_id, service_uri);
 		while(1){
-			ret = linber_start_job_service(service_uri, uri_len, service_id, worker.service_token, worker_id, &slot_id, &service_request, &service_request_len);
+			response_len = 1024;	// suppose is enough
+			ret = linber_start_job_service_shm(	service_uri, uri_len,				\
+												service_id, worker.service_token,	\
+												worker_id, &slot_id,				\
+												&request, &request_len,				\
+												&request_shm,						\
+												&response, response_len,			\
+												&response_key, file_str);
 			if(ret < 0){
 				break;
 			}
@@ -62,10 +73,16 @@ void *thread_job(void *args){
 					passed_millis = (end.tv_usec - start.tv_usec) * 0.001;
 				} while(passed_millis < worker.exec_time);
 			}
-			service_response_len = service_request_len;
-//			service_response = malloc(service_response_len);
-//			memcpy(service_response, service_request, service_response_len);
-			ret = linber_end_job_service_shm(service_uri, uri_len, service_id, worker.service_token, worker_id, slot_id, service_request, service_response, service_response_len, file_str);
+
+			response_len = request_len;
+			memcpy(response, request, response_len);
+			printf("response: %s\n", response);
+
+			ret = linber_end_job_service_shm(	service_uri, uri_len,				\
+												service_id, worker.service_token,	\
+												worker_id, slot_id,					\
+												request, request_shm,				\
+												response, response_len, response_key);
 		}
 	}
 	linber_destroy_worker(file_str);

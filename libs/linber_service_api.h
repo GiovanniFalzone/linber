@@ -12,8 +12,12 @@
 #include <sys/shm.h>
 #include "linber_ioctl.h"
 
+#define FIXED_SHM_LEN		1024
+
 #define LINBER_ERROR_DEVICE_FILE	-1
 #define LINBER_ERROR_URI			-2
+#define LINBER_SHM_ERROR			-3
+
 
 int linber_fd = -1;
 
@@ -96,7 +100,7 @@ int linber_register_service_worker(char *service_uri, unsigned int uri_len, unsi
 
 	if(ret >= 0){
 		if(*worker_id > 99){
-			return -1;
+			return LINBER_KILL_WORKER;
 		}
 		sprintf(worker_id_str, "%d", *worker_id);
 		file_str_len = uri_len + strlen("/tmp/_99\0");
@@ -129,17 +133,67 @@ void linber_destroy_worker(char *file_str){
 	free(file_str);
 }
 
+//------------------------------------------------------
+char *create_shm_from_key(key_t key, int len){
+	char* shm;
+	int shmid;
+	if((shmid = shmget(key, len, IPC_CREAT | 0666)) < 0) {
+		printf("shmget error\n");
+		return NULL;
+	}
+
+	printf("New shm key: %d, id: %d \n" , key, shmid);
+
+	if((shm = (char*)shmat(shmid, NULL, 0)) == (char *) -1) {
+		printf("shmat error\n");
+		return NULL;
+	}
+
+	return shm;
+}
+
+char *create_shm_from_filepath(char* file_str, int len, key_t *key){
+	static int low_id = 0;
+	if((*key = ftok(file_str, low_id)) == (key_t) -1) {
+		printf("IPC error: ftok\n");
+		return NULL;
+	}
+	low_id = (low_id + 1)%255;
+	return create_shm_from_key(*key, len);
+}
+
+void detach_shm(void *addr){
+	if(shmdt(addr)) {
+		perror("shmop: shmdt failed\n");
+	}
+}
+
+char* attach_shm_from_key(key_t key, int len){
+	int shmid;
+	char *shm;
+
+	if ((shmid = shmget(key, len, 0666)) < 0) {
+		printf("shmget error\n");
+		return NULL;
+	}
+	if ((shm = (char*)shmat(shmid, NULL, 0)) == (char *) -1) {
+		printf("shmat error\n");
+		return NULL;
+	}
+	return shm;
+}
+//------------------------------------------------------
+
 
 int linber_request_service_shm(char *service_uri, unsigned int uri_len, unsigned int rel_deadline,\
 							char *request, int request_len,\
-							char **response, int *response_len){
+							char **response, int *response_len,
+							boolean *response_shm_mode	
+							){
 	int ret = 0;
 	unsigned long token;
 	linber_service_struct param;
-	int shmid;
 	key_t response_key;
-	char *shm_mode;
-	boolean response_shm_mode = FALSE;
 
 	param.op_params.request.blocking = TRUE;;
 	param.service_uri = service_uri;
@@ -149,28 +203,26 @@ int linber_request_service_shm(char *service_uri, unsigned int uri_len, unsigned
 	param.op_params.request.status = LINBER_REQUEST_INIT;
 	param.op_params.request.request_len = request_len;
 	param.op_params.request.request_shm_mode = TRUE;
+
 	param.op_params.request.request.shm_key = 1;
+//----------------------------
+	// user client create shared memory for request
+	// pass me the request key, here *rquest has no sense
+//----------------------------
 
 	param.op_params.request.ptr_response_len = response_len;
-	param.op_params.request.ptr_response_shm_mode = &response_shm_mode;
+	param.op_params.request.ptr_response_shm_mode = response_shm_mode;
 	param.op_params.request.ptr_shm_response_key = &response_key;
 
 	ret = ioctl_send(IOCTL_REQUEST_SERVICE, &param);
 
 	if(ret == LINBER_REQUEST_SUCCESS){
-		if(response_shm_mode) {
-			ret = ioctl_send(IOCTL_REQUEST_SERVICE_GET_RESPONSE, &param);
+		if(*response_shm_mode) {
+			if((ret = ioctl_send(IOCTL_REQUEST_SERVICE_GET_RESPONSE, &param) < 0)){
+				return LINBER_REQUEST_FAILED;
+			}
 			printf("response in shared memory, key:%d\n", response_key);
-
-			// if ((shmid = shmget(response_key, *response_len, 0666)) < 0) {
-			// 	printf("shmget\n");
-			// 	return -1;
-			// }
-			// if ((shm_mode = (char*)shmat(shmid, NULL, 0)) == (char *) -1) {
-			// 	printf("shmat\n");
-			// 	return -1;
-			// }
-
+			*response = attach_shm_from_key(response_key, FIXED_SHM_LEN);
 		} else {
 			*response = (char*)malloc(*response_len);
 			if(response != NULL){
@@ -181,7 +233,6 @@ int linber_request_service_shm(char *service_uri, unsigned int uri_len, unsigned
 			}
 		}
 	}
-
 
 	switch(ret){
 		case LINBER_SERVICE_NOT_EXISTS:
@@ -195,11 +246,12 @@ int linber_request_service_shm(char *service_uri, unsigned int uri_len, unsigned
 // blocking
 int linber_request_service(char *service_uri, unsigned int uri_len, unsigned int rel_deadline,\
 							char *request, int request_len,\
-							char **response, int *response_len){
+							char **response, int *response_len,
+							boolean *response_shm_mode
+							){
 	int ret = 0;
 	unsigned long token;
 	linber_service_struct param;
-	boolean response_shm_mode = FALSE;
 	key_t response_key;
 
 	param.op_params.request.blocking = TRUE;;
@@ -213,16 +265,19 @@ int linber_request_service(char *service_uri, unsigned int uri_len, unsigned int
 	param.op_params.request.request.data = request;
 
 	param.op_params.request.ptr_response_len = response_len;
-	param.op_params.request.ptr_response_shm_mode = &response_shm_mode;
+	param.op_params.request.ptr_response_shm_mode = response_shm_mode;
 	param.op_params.request.ptr_shm_response_key = &response_key;
 
 
 	ret = ioctl_send(IOCTL_REQUEST_SERVICE, &param);
 
 	if(ret == LINBER_REQUEST_SUCCESS){
-		if(response_shm_mode) {
-			ret = ioctl_send(IOCTL_REQUEST_SERVICE_GET_RESPONSE, &param);
+		if(*response_shm_mode) {
+			if((ret = ioctl_send(IOCTL_REQUEST_SERVICE_GET_RESPONSE, &param) < 0)){
+				return LINBER_REQUEST_FAILED;
+			}
 			printf("response in shared memory, key:%d\n", response_key);
+			*response = attach_shm_from_key(response_key, FIXED_SHM_LEN);
 		} else {
 			*response = (char*)malloc(*response_len);
 			if(response != NULL){
@@ -239,6 +294,20 @@ int linber_request_service(char *service_uri, unsigned int uri_len, unsigned int
 			break;
 	}
 	return ret;
+}
+
+void linber_request_service_clean(char *request, boolean shm_request_mode, char *response, boolean shm_response_mode ){
+	if(shm_request_mode){
+		detach_shm(request);
+	} else {
+		free(request);
+	}
+
+	if(shm_response_mode){
+		detach_shm(response);
+	} else {
+		free(response);
+	}
 }
 
 int linber_request_service_no_blocking(char *service_uri, unsigned int uri_len, unsigned int rel_deadline,\
@@ -266,12 +335,13 @@ int linber_request_service_no_blocking(char *service_uri, unsigned int uri_len, 
 	return ret;
 }
 
-int linber_request_service_get_response(char *service_uri, unsigned int uri_len,\
-										char **response, int *response_len,\
-										unsigned long *ptr_token){
+int linber_request_service_get_response(char *service_uri, unsigned int uri_len,	\
+										char **response, int *response_len,			\
+										boolean *response_shm_mode,					\
+										unsigned long *ptr_token
+										){
 	int ret = 0;
 	linber_service_struct param;
-	boolean response_shm_mode = FALSE;
 	key_t response_key;
 
 	param.service_uri = service_uri;
@@ -280,14 +350,17 @@ int linber_request_service_get_response(char *service_uri, unsigned int uri_len,
 	param.op_params.request.status = LINBER_REQUEST_WAITING;
 
 	param.op_params.request.ptr_response_len = response_len;
-	param.op_params.request.ptr_response_shm_mode = &response_shm_mode;
+	param.op_params.request.ptr_response_shm_mode = response_shm_mode;
 	param.op_params.request.ptr_shm_response_key = &response_key;
 
 	ret = ioctl_send(IOCTL_REQUEST_SERVICE, &param);
 	if(ret == LINBER_REQUEST_SUCCESS){
-		if(response_shm_mode) {
-			ret = ioctl_send(IOCTL_REQUEST_SERVICE_GET_RESPONSE, &param);
+		if(*response_shm_mode) {
+			if((ret = ioctl_send(IOCTL_REQUEST_SERVICE_GET_RESPONSE, &param) < 0)){
+				return LINBER_REQUEST_FAILED;
+			}
 			printf("response in shared memory, key:%d\n", response_key);
+			*response = attach_shm_from_key(response_key, FIXED_SHM_LEN);
 		} else {
 			*response = (char*)malloc(*response_len);
 			if(response != NULL){
@@ -306,11 +379,12 @@ int linber_request_service_get_response(char *service_uri, unsigned int uri_len,
 	return ret;
 }
 
-
-int linber_start_job_service(char *service_uri, unsigned int uri_len, int service_id, unsigned long service_token, unsigned int worker_id,\
-								 unsigned int *slot_id, char **request, int *request_len){
+int linber_start_job_service(	char *service_uri, unsigned int uri_len,		\
+								int service_id, unsigned long service_token,	\
+								unsigned int worker_id, unsigned int *slot_id,	\
+								char **request, int *request_len, 				\
+								boolean *request_shm_mode){
 	int ret = 0;
-	boolean request_shm_mode;
 	key_t request_key;
 	linber_service_struct param;
 	param.service_uri = service_uri;
@@ -320,14 +394,19 @@ int linber_start_job_service(char *service_uri, unsigned int uri_len, int servic
 	param.op_params.start_job.service_token = service_token;
 	param.op_params.start_job.ptr_slot_id = slot_id;
 	param.op_params.start_job.ptr_request_len = request_len;
-	param.op_params.start_job.ptr_request_shm_mode = &request_shm_mode;
+	param.op_params.start_job.ptr_request_shm_mode = request_shm_mode;
 	param.op_params.start_job.data.ptr_request_key = &request_key;
 	ret = ioctl_send(IOCTL_START_JOB_SERVICE, &param);
 	if(ret >= 0){
-		if(!request_shm_mode){
+		if(*request_shm_mode){
+			*request = attach_shm_from_key(request_key, FIXED_SHM_LEN);
+		} else {
 			*request = (char*)malloc(*request_len);
 			param.op_params.start_job.data.ptr_request = *request;
 			ret = ioctl_send(IOCTL_START_JOB_GET_REQUEST_SERVICE, &param);
+		}
+		if(*request == NULL){
+			return LINBER_SERVICE_SKIP_JOB;
 		}
 	}
 	switch(ret){
@@ -344,9 +423,62 @@ int linber_start_job_service(char *service_uri, unsigned int uri_len, int servic
 	return ret;
 }
 
-int linber_end_job_service(char *service_uri, unsigned int uri_len, int service_id, unsigned long service_token, unsigned int worker_id,\
-							unsigned int slot_id,
-							char *request, char *response, int response_len){
+int linber_start_job_service_shm(	char *service_uri, unsigned int uri_len,				\
+									int service_id, unsigned long service_token,			\
+									unsigned int worker_id, unsigned int *slot_id,			\
+									char **request, int *request_len,						\
+									boolean *request_shm_mode,									\
+									char **response, int response_len, 						\
+									key_t *response_key, char *file_str){
+	int ret = 0;
+	key_t request_key;
+	linber_service_struct param;
+
+	param.service_uri = service_uri;
+	param.service_uri_len = uri_len;
+	param.op_params.start_job.service_id = service_id;
+	param.op_params.start_job.worker_id = worker_id;
+	param.op_params.start_job.service_token = service_token;
+	param.op_params.start_job.ptr_slot_id = slot_id;
+	param.op_params.start_job.ptr_request_len = request_len;
+	param.op_params.start_job.ptr_request_shm_mode = request_shm_mode;
+	param.op_params.start_job.data.ptr_request_key = &request_key;
+	ret = ioctl_send(IOCTL_START_JOB_SERVICE, &param);
+	if(ret >= 0){
+		if(*request_shm_mode){
+			*request = attach_shm_from_key(request_key, FIXED_SHM_LEN);
+		} else {
+			*request = (char*)malloc(*request_len);
+			param.op_params.start_job.data.ptr_request = *request;
+			ret = ioctl_send(IOCTL_START_JOB_GET_REQUEST_SERVICE, &param);
+		}
+		if(*request == NULL){
+			return LINBER_SERVICE_SKIP_JOB;
+		}
+//---------------------response in shm------------------------
+	*response = create_shm_from_filepath(file_str, FIXED_SHM_LEN, response_key);
+//-------------------------------------------------------------
+
+	}
+	switch(ret){
+		case LINBER_SERVICE_NOT_EXISTS:
+			printf("StartJob: Service %s does not exists\n", service_uri);
+			break;
+		case LINBER_KILL_WORKER:
+			printf("StartJob: fatal error, pls kill the worker %d token:%lu\n", worker_id, service_token);
+			break;
+		case LINBER_SERVICE_SKIP_JOB:
+			printf("StartJob: Skip job, Spurious wakeup for workerd %d\n", worker_id);
+			break;
+	}
+	return ret;
+}
+
+int linber_end_job_service(	char *service_uri, unsigned int uri_len,			\
+							int service_id, unsigned long service_token,		\
+							unsigned int worker_id, unsigned int slot_id,		\
+							char *request, boolean request_shm_mode,			\
+							char *response, int response_len){
 	int ret = 0;
 	linber_service_struct param;
 
@@ -372,19 +504,22 @@ int linber_end_job_service(char *service_uri, unsigned int uri_len, int service_
 			printf("EndJob: Skip job, Spurious wakeup for workerd %d\n", worker_id);
 			break;
 	}
-	free(request);
+	if(request_shm_mode){
+		detach_shm(request);
+	} else {
+		free(request);
+	}
 	free(response);
 	return ret;
 }
 
-int linber_end_job_service_shm(char *service_uri, unsigned int uri_len, int service_id, unsigned long service_token, unsigned int worker_id,\
-							unsigned int slot_id,
-							char *request, char *response, int response_len, char *file_str){
-	int ret = 0, shmid;
-	static int low_id = 0;
-	key_t response_key;
+int linber_end_job_service_shm(	char *service_uri, unsigned int uri_len,		\
+								int service_id, unsigned long service_token,	\
+								unsigned int worker_id, unsigned int slot_id,	\
+								char *request, boolean request_shm,				\
+								char *response, int response_len, key_t response_key){
+	int ret = 0;
 	linber_service_struct param;
-	char *shm_mode;
 
 	param.service_uri = service_uri;
 	param.service_uri_len = uri_len;
@@ -394,32 +529,16 @@ int linber_end_job_service_shm(char *service_uri, unsigned int uri_len, int serv
 	param.op_params.end_job.slot_id = slot_id;
 	param.op_params.end_job.response_len = response_len;
 	param.op_params.end_job.response_shm_mode = TRUE;
-
-	if((response_key = ftok(file_str, low_id)) == (key_t) -1) {
-		printf("IPC error: ftok\n");
-		return -1;
-	}
-	low_id = (low_id++)%255;
-
 	param.op_params.end_job.response.shm_key = response_key;
-
-	if((shmid = shmget(response_key, response_len, IPC_CREAT | 0666)) < 0) {
-		printf("shmget\n");
-		return -1;
-	}
-
-	printf("key: %d, id: %d \n" , response_key, shmid);
-
-	if((shm_mode = (char*)shmat(shmid, NULL, 0)) == (char *) -1) {
-		printf("shmat\n");
-		return -1;
-	}
 
 	ret = ioctl_send(IOCTL_END_JOB_SERVICE, &param);
 
-	if(shmdt(shm_mode)) {
-		perror("shmop: shmdt failed\n");
+	if(request_shm){
+		detach_shm(request);
+	} else {
+		free(request);
 	}
+	detach_shm(response);
 
 	switch(ret){
 		case LINBER_SERVICE_NOT_EXISTS:
@@ -432,8 +551,6 @@ int linber_end_job_service_shm(char *service_uri, unsigned int uri_len, int serv
 			printf("EndJob: Skip job, Spurious wakeup for workerd %d\n", worker_id);
 			break;
 	}
-//	free(request);
-//	free(response);
 	return ret;
 }
 

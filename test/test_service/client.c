@@ -32,27 +32,38 @@ void sig_handler(int signo){
 }
 
 void *thread_job(void *args){
-	char *service_request = "ciao\0";
-	int service_request_len = strlen(service_request) + 1;
-	char *service_response;
-	int service_response_len;
 	thread_info worker = *(thread_info*)args;
 	struct timeval start, end;
 	unsigned long passed_millis = 0;
 	int ret = 0;
 	unsigned long token;
+	int request_len = strlen("ciao\0") + 1;
+	char *request = malloc(request_len);
+	char *response;
+	int response_len;
+	boolean response_shm_mode = FALSE;
+	strcpy(request, "ciao\0");
+	request[request_len-1] = '\0';
+
 	if(abort_request == 0){
 		gettimeofday(&start, NULL);
 		if(worker.blocking == 1){
-			ret = linber_request_service(worker.service_uri, worker.uri_len, REL_DEADLINE, service_request, service_request_len, &service_response, &service_response_len);
+			ret = linber_request_service(	worker.service_uri, worker.uri_len,	\
+											REL_DEADLINE, request, request_len,	\
+											&response, &response_len, &response_shm_mode);
+
 			printf("sending Blocking request id:%d, service:%s\n", worker.id, worker.service_uri);
 		} else {
-			ret = linber_request_service_no_blocking(worker.service_uri, worker.uri_len, REL_DEADLINE, service_request, service_request_len, &token);
+			ret = linber_request_service_no_blocking(	worker.service_uri, worker.uri_len,	\
+														REL_DEADLINE, request, request_len,	\
+														&token);
 			if(ret >= 0){
 				printf("sending NON Blocking request id:%d, service:%s\n", worker.id, worker.service_uri);
 				sleep(1);
 				printf("Asking for response request id:%d, service:%s\n", worker.id, worker.service_uri);
-				ret = linber_request_service_get_response(worker.service_uri, worker.uri_len, &service_response, &service_response_len, &token);
+				ret = linber_request_service_get_response(	worker.service_uri, worker.uri_len,	\
+															&response, &response_len, &response_shm_mode,	\
+															&token);
 			}
 		}
 		if(ret < 0){
@@ -60,9 +71,9 @@ void *thread_job(void *args){
 		} else {
 			gettimeofday(&end, NULL);
 			passed_millis = (end.tv_sec - start.tv_sec) * 1000 + (end.tv_usec - start.tv_usec) / 1000;
-			printf("Request %d Response: %d %s served in %lu ms\n", worker.id, service_response_len, service_response, passed_millis);
+			printf("Request %d Response: %d %s served in %lu ms\n", worker.id, response_len, response, passed_millis);
 		}
-		free(service_response);
+		linber_request_service_clean(request, FALSE, response, response_shm_mode);
 	}
 	return NULL;
 }
