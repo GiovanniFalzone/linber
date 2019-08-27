@@ -36,11 +36,21 @@ void *thread_job(void *args){
 	unsigned long passed_millis = 0;
 	int ret = 0;
 	unsigned long token;
-	int request_len = strlen("ciao\0") + 1;
-	char *request = malloc(request_len);
+	int request_len;
+	char *request;
+	key_t request_shm_key;
+	int request_shm_id;
 	char *response;
 	int response_len;
-	boolean response_shm_mode = FALSE;
+	boolean response_shm_mode;
+
+	request_len = strlen("ciao\0") + 1;
+	request = create_shm_from_filepath(".", request_len, &request_shm_key, &request_shm_id);
+
+	if(request == NULL){
+		printf("Error in shared memory allocation\n");
+		return NULL;
+	}
 	strcpy(request, "ciao\0");
 	request[request_len-1] = '\0';
 
@@ -48,13 +58,13 @@ void *thread_job(void *args){
 		gettimeofday(&start, NULL);
 		if(worker.blocking == 1){
 			ret = linber_request_service_shm(	worker.service_uri, worker.uri_len,	\
-												REL_DEADLINE, request, request_len,	\
+												REL_DEADLINE, request_shm_key, request_len,	\
 												&response, &response_len, &response_shm_mode);
 			printf("sending Blocking request id:%d, service:%s\n", worker.id, worker.service_uri);
 		} else {
-			ret = linber_request_service_no_blocking(	worker.service_uri, worker.uri_len,		\
-														REL_DEADLINE, request, request_len,		\
-														&token);
+			ret = linber_request_service_no_blocking_shm(	worker.service_uri, worker.uri_len,		\
+															REL_DEADLINE, request_shm_key, request_len,		\
+															&token);
 			if(ret >= 0){
 				printf("sending NON Blocking request id:%d, service:%s\n", worker.id, worker.service_uri);
 				sleep(1);

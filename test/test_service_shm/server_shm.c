@@ -13,8 +13,6 @@
 #define DEFAULT_JOB_EXEC_TIME	1	//ms
 #define DEFAULT_MAX_CONCURRENT_WORKERS		4
 
-#define DEBUG
-
 #define FIXED_SHM_RESPONSE_LEN		1024
 
 char *service_uri;
@@ -39,32 +37,40 @@ void sig_handler(int signo){
 }
 
 void *thread_job(void *args){
-	int ret, job_num = 1, request_len, response_len;
+	int ret, job_num = 1, request_len, response_len, response_shm_id;
 	unsigned int worker_id, slot_id;
 	char *request, *response, *file_str;
 	key_t response_key;
-	boolean request_shm;
+	boolean request_shm_mode;
 	thread_info worker = *(thread_info*)args;
 
 	if(linber_register_service_worker(service_uri, uri_len,worker.service_token, &worker_id, &file_str) == 0){
 		printf("new service worker file %s\n", file_str);
 		printf("started_thread id:%d, service:%s\n", worker_id, service_uri);
 		while(1){
-			response_len = 1024;	// suppose is enough
-			ret = linber_start_job_service_shm(	service_uri, uri_len,				\
-												service_id, worker.service_token,	\
-												worker_id, &slot_id,				\
-												&request, &request_len,				\
-												&request_shm,						\
-												&response, response_len,			\
-												&response_key, file_str);
+			ret = linber_start_job_service(	service_uri, uri_len,				\
+											service_id, worker.service_token,	\
+											worker_id, &slot_id,				\
+											&request, &request_len, &request_shm_mode);
+
 			if(ret < 0){
 				break;
 			}
 			if(ret != LINBER_SERVICE_SKIP_JOB){
+				//---------------------response in shm------------------------
+				response_len = request_len;
+				response = create_shm_from_filepath(file_str, response_len, &response_key, &response_shm_id);
+				if(response == NULL){
+					printf("Error in shared memory allocation\n");
+					break;
+				}
 				#ifdef DEBUG
-					printf("thread id:%d job#:%d, serving request\n", worker_id, job_num++);
+					printf("thread id:%d job#:%d, serving request, %s %d\n", worker_id, job_num++, request, request_len);
+					memcpy(response, request, response_len);
+					printf("response: %s\n", response);
 				#endif
+				//-------------------------------------------------------------
+
 				struct timeval start, end;
 				gettimeofday(&start, NULL);
 				unsigned long passed_millis = 0;
@@ -74,14 +80,10 @@ void *thread_job(void *args){
 				} while(passed_millis < worker.exec_time);
 			}
 
-			response_len = request_len;
-			memcpy(response, request, response_len);
-			printf("response: %s\n", response);
-
 			ret = linber_end_job_service_shm(	service_uri, uri_len,				\
 												service_id, worker.service_token,	\
 												worker_id, slot_id,					\
-												request, request_shm,				\
+												request, request_shm_mode,			\
 												response, response_len, response_key);
 		}
 	}

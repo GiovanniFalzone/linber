@@ -13,7 +13,6 @@
 #define DEFAULT_JOB_EXEC_TIME	1	//ms
 #define DEFAULT_MAX_CONCURRENT_WORKERS		4
 
-#define DEBUG
 
 char *service_uri;
 int uri_len;
@@ -54,9 +53,6 @@ void *thread_job(void *args){
 				break;
 			}
 			if(ret != LINBER_SERVICE_SKIP_JOB){
-				#ifdef DEBUG
-					printf("thread id:%d job#:%d, serving request, %s %d\n", worker_id, job_num++, request, request_len);
-				#endif
 				struct timeval start, end;
 				gettimeofday(&start, NULL);
 				unsigned long passed_millis = 0;
@@ -65,9 +61,14 @@ void *thread_job(void *args){
 					passed_millis = (end.tv_usec - start.tv_usec) * 0.001;
 				} while(passed_millis < worker.exec_time);
 			}
+
 			service_response_len = request_len;
 			service_response = malloc(service_response_len);
-			memcpy(service_response, request, service_response_len);
+			#ifdef DEBUG
+				printf("thread id:%d job#:%d, serving request, %s %d\n", worker_id, job_num++, request, request_len);
+				memcpy(service_response, request, service_response_len);
+			#endif
+
 			ret = linber_end_job_service(	service_uri, uri_len,				\
 											service_id, worker.service_token,	\
 											worker_id, slot_id,					\
