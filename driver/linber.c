@@ -502,6 +502,10 @@ static int linber_request_service(linber_service_struct *obj){
 		shm_mode = (obj->op_params.request.request_shm_mode == 1);
 		blocking = (obj->op_params.request.blocking == 1);
 
+		if(!shm_mode && (request_len > LINBER_MAX_MEM_SIZE)){
+			return LINBER_PAYLOAD_SIZE_ERROR;
+		}
+
 		//----------------------init-----------------------
 		if(status == LINBER_REQUEST_INIT){
 			service_load_balancing(ser_node);
@@ -687,17 +691,21 @@ static int linber_End_Job(linber_service_struct *obj){
 			unload_slot_and_get_request(ser_node, &req_node, &slot, slot_id);
 			if(slot != NULL){
 				if(req_node != NULL){
-					req_node->result_cmd = LINBER_REQUEST_SUCCESS;
-					// copy service result
-
 					req_node->response_len = obj->op_params.end_job.response_len;
 					req_node->response_shm_mode = (obj->op_params.end_job.response_shm_mode == 1);
 					if(req_node->response_shm_mode){	// use shared memory
 						req_node->response.shm_key = obj->op_params.end_job.response.shm_key;
 					} else {
+						if((req_node->response_len > LINBER_MAX_MEM_SIZE)){
+							req_node->result_cmd = LINBER_REQUEST_FAILED;
+							enqueue_request_completed(ser_node, req_node);
+							up(&req_node->Request_sem);	// end job
+							return LINBER_PAYLOAD_SIZE_ERROR;
+						}
 						req_node->response.data = kmalloc(req_node->response_len, GFP_KERNEL);
 						checkMemoryError(copy_from_user(req_node->response.data, obj->op_params.end_job.response.data, req_node->response_len));
 					}
+					req_node->result_cmd = LINBER_REQUEST_SUCCESS;
 					enqueue_request_completed(ser_node, req_node);
 					up(&req_node->Request_sem);	// end job
 				} else {
@@ -769,7 +777,7 @@ static int linber_get_system_status(void* system_user){
 
 //-------------------------------------------------------------
 static long	linber_ioctl(struct file *f, unsigned int ioctl_op, unsigned long ioctl_param){ 
-	int ret;
+	long ret;
 	char *uri_tmp;
 	linber_service_struct *obj;
 	if(ioctl_op != IOCTL_SYSTEM_STATUS){

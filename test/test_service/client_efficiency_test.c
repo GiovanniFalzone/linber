@@ -25,6 +25,8 @@ int get_service_time(unsigned int req_size, int blocking, unsigned int *min_micr
 	unsigned long token;
 
 	for(int i=0; i<ITERATION_SAME_REQUEST; i++){
+		*avg_micros = 0;
+		*min_micros = 0;
 		request_len = req_size + 1;
 		request = malloc(request_len);
 		if(request == NULL){
@@ -42,28 +44,25 @@ int get_service_time(unsigned int req_size, int blocking, unsigned int *min_micr
 			ret = linber_request_service(	service_uri, uri_len,							\
 											1, request, request_len,						\
 											&response, &response_len, &response_shm_mode);
+			if(ret < 0) return ret;
 		} else {
 			ret = linber_request_service_no_blocking(	service_uri, uri_len,		\
 														1, request, request_len,	\
 														&token);
-			if(ret >= 0){
-				ret = linber_request_service_get_response(	service_uri, uri_len,							\
-															&response, &response_len, &response_shm_mode,	\
-															&token);
-			}
+			if(ret < 0) return ret;
+			ret = linber_request_service_get_response(	service_uri, uri_len,							\
+														&response, &response_len, &response_shm_mode,	\
+														&token);
+			if(ret < 0) return ret;
 		}
 
 		linber_request_service_clean(request, FALSE, response, response_shm_mode);
 
-		if(ret < 0){
-			printf("request aborted\n");
-		} else {
-			gettimeofday(&end, NULL);
-			passed_micros = (end.tv_usec - start.tv_usec);
-			avg_time_micros += passed_micros;
-			if(passed_micros < min_time_micros){
-				min_time_micros = passed_micros;
-			}
+		gettimeofday(&end, NULL);
+		passed_micros = (end.tv_usec - start.tv_usec);
+		avg_time_micros += passed_micros;
+		if(passed_micros < min_time_micros){
+			min_time_micros = passed_micros;
 		}
 	}
 	*avg_micros = avg_time_micros/ITERATION_SAME_REQUEST;

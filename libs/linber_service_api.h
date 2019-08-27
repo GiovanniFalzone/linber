@@ -40,6 +40,7 @@ int linber_exit(){
 
 int ioctl_send(unsigned int cmd, void* param){
 	boolean close_it = FALSE;
+	long ret;
 	if(linber_fd < 0){
 		close_it = TRUE;
 		linber_init();
@@ -48,17 +49,25 @@ int ioctl_send(unsigned int cmd, void* param){
 			return LINBER_ERROR_DEVICE_FILE;
 		}
 	}
-	long int ret = ioctl(linber_fd, cmd, param);
+	ret = ioctl(linber_fd, cmd, param);
 	if(close_it){
 		linber_exit();
 	}
 	if(ret < 0){
-		printf("------------Linber err %li fd:%i----------------\n", ret, linber_fd);
-	}
-	switch(ret){
-		case LINBER_IOCTL_NOT_IMPLEMENTED:
-		printf("IOCTL Operation %d not implemented\n", cmd);
-		break;
+		printf("------------Linber err %li----------------\n", ret);
+		switch(ret){
+			case LINBER_IOCTL_NOT_IMPLEMENTED:
+				printf("IOCTL Operation %d not implemented\n", cmd);
+				break;
+
+			case LINBER_PAYLOAD_SIZE_ERROR:
+				printf("Payload too large, use shared memory\n");
+				break;
+
+			default:
+				printf("unspecified error\n");
+				break;
+		}
 	}
 	return ret;
 }
@@ -406,7 +415,6 @@ void linber_request_service_clean(char *request, boolean shm_request_mode, char 
 }
 
 //-----------------------------------------------------------------------
-
 int linber_start_job_service(	char *service_uri, unsigned int uri_len,		\
 								int service_id, unsigned long service_token,	\
 								unsigned int worker_id, unsigned int *slot_id,	\
@@ -475,6 +483,13 @@ int linber_end_job_service(	char *service_uri, unsigned int uri_len,			\
 	param.op_params.end_job.response.data = response;
 
 	ret = ioctl_send(IOCTL_END_JOB_SERVICE, &param);
+	if(request_shm_mode){
+		detach_shm(request);
+	} else {
+		free(request);
+	}
+	free(response);
+
 	switch(ret){
 		case LINBER_SERVICE_NOT_EXISTS:
 			printf("EndJob: %s does not exists\n", service_uri);
@@ -486,12 +501,7 @@ int linber_end_job_service(	char *service_uri, unsigned int uri_len,			\
 			printf("EndJob: Skip job, Spurious wakeup for workerd %d\n", worker_id);
 			break;
 	}
-	if(request_shm_mode){
-		detach_shm(request);
-	} else {
-		free(request);
-	}
-	free(response);
+
 	return ret;
 }
 
