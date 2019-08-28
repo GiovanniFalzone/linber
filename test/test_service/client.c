@@ -41,7 +41,8 @@ void *thread_job(void *args){
 	char *request = malloc(request_len);
 	char *response;
 	int response_len;
-	boolean response_shm_mode = FALSE;
+	boolean response_shm_mode;
+
 	strcpy(request, "ciao\0");
 	request[request_len-1] = '\0';
 

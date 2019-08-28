@@ -21,6 +21,7 @@ class linberServiceWorker {
 	bool worker_alive;
 
 protected:
+		boolean request_shm_mode;
 		char *request;
 		int request_len;
 		char *response;
@@ -65,7 +66,10 @@ public:
 		int ret;
 		linber_init();
 		while(worker_alive){
-			ret = linber_start_job_service(service_uri, uri_len, service_id, service_token, worker_id, &slot_id, &request, &request_len);
+			ret = linber_start_job_service(	service_uri, uri_len,				\
+											service_id, service_token,			\
+											worker_id, &slot_id,				\
+											&request, &request_len, &request_shm_mode);
 
 			if(ret < 0){
 				printf("Job aborted ret %i\n", ret);
@@ -76,7 +80,11 @@ public:
 				execute_job();
 			}
 
-			ret = linber_end_job_service(service_uri, uri_len, service_id, service_token, worker_id, slot_id, request, response, response_len);
+			ret = linber_end_job_service(	service_uri, uri_len,				\
+											service_id, service_token,			\
+											worker_id, slot_id,					\
+											request, request_shm_mode,			\
+											response, response_len);
 		}
 	}
 

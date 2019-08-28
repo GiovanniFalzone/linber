@@ -36,9 +36,9 @@ void sig_handler(int signo){
 }
 
 void *thread_job(void *args){
-	int ret, job_num = 1, request_len, service_response_len;
+	int ret, job_num = 1, request_len, response_len;
 	unsigned int worker_id, slot_id;
-	char *request, *service_response, *file_str;
+	char *request, *response, *file_str;
 	boolean request_shm_mode;
 	thread_info worker = *(thread_info*)args;
 
@@ -62,18 +62,18 @@ void *thread_job(void *args){
 				} while(passed_millis < worker.exec_time);
 			}
 
-			service_response_len = request_len;
-			service_response = malloc(service_response_len);
+			response_len = request_len;
+			response = malloc(response_len);
 			#ifdef DEBUG
 				printf("thread id:%d job#:%d, serving request, %s %d\n", worker_id, job_num++, request, request_len);
-				memcpy(service_response, request, service_response_len);
+				memcpy(response, request, response_len);
 			#endif
 
 			ret = linber_end_job_service(	service_uri, uri_len,				\
 											service_id, worker.service_token,	\
 											worker_id, slot_id,					\
 											request, request_shm_mode,			\
-											service_response, service_response_len);
+											response, response_len);
 		}
 	}
 	linber_destroy_worker(file_str);

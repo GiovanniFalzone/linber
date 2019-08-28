@@ -13,6 +13,7 @@ int main(){
 	int response_len;
 	char* request;
 	char * response;
+	boolean response_shm_mode;
 
 	linber_init();
 
@@ -28,7 +29,9 @@ int main(){
 		cout << request_msg.operation() <<"("<< request_msg.operand_a() <<","<< request_msg.operand_b() <<")" << "len:" << request_len << endl;
 		request_msg.SerializeToArray(request, request_len);
 
-		linber_request_service("org.calculator", sizeof("org.calculator1"), 100, request, request_len, &response, &response_len);
+		linber_request_service(	"org.calculator",sizeof("org.calculator1"),	\
+								10, request, request_len,					\
+								&response, &response_len, &response_shm_mode);
 
 		response_msg.ParseFromArray(response, response_len);
 		cout << "Result: "<< response_msg.result() << endl;
