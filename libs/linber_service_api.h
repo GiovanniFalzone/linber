@@ -10,6 +10,7 @@
 #include <sys/types.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
+#include <errno.h>
 #include "linber_ioctl.h"
 
 #define LINBER_ERROR_DEVICE_FILE	-1
@@ -145,7 +146,44 @@ void linber_destroy_worker(char *file_str){
 char *create_shm_from_key(key_t key, int len, int *id){
 	char* shm;
 	if((*id = shmget(key, len, IPC_CREAT | 0666)) < 0) {
-		printf("shmget error\n");
+		printf("shmget error %d\n", *id);
+		switch(*id){
+			case -EACCES:
+				printf("The user does not have permission to access the shared memory segment, and does not have the CAP_IPC_OWNER capability in the user namespace that governs its IPC namespace.\n");
+				break;
+
+			case -EEXIST:
+				printf("IPC_CREAT  and  IPC_EXCL  were  specified in shmflg, but a shared memory segment already exists for key.\n");
+				break;
+
+			case -EINVAL:
+				printf("A new segment was to be created and size is less than SHMMIN or greater than SHMMAX.\n");
+				printf("A segment for the given key exists, but size is greater than the size of that segment.\n");
+				break;
+
+			case -ENFILE:
+				printf("The system-wide limit on the total number of open files has been reached.\n");
+				break;
+
+			case -ENOENT:
+				printf("No segment exists for the given key, and IPC_CREAT was not specified.\n");
+				break;
+
+			case -ENOMEM:
+				printf("No memory could be allocated for segment overhead.\n");
+				break;
+
+			case -ENOSPC:
+				printf("All possible shared memory IDs have been taken (SHMMNI), or allocating a segment of  the requested  size  would cause the system to exceed the system-wide limit on shared memory (SHMALL).\n");
+				break;
+
+      		case -EPERM:
+				printf("The SHM_HUGETLB flag was specified, but the caller was not privileged (did not have  the CAP_IPC_LOCK capability).\n");
+				break;
+			default:
+				printf("undefined error\n");
+				break;
+		}
 		return NULL;
 	}
 

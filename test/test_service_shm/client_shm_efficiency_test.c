@@ -120,10 +120,6 @@ int main(int argc,char* argv[]){
 		int n = atoi(argv[3]);
 		if(n > 0){
 			iterations = n;
-			if(iterations >= 22){
-				printf("maximum allowed dimension 4Mb\n");
-				iterations = 21;
-			}
 		}
 	}
 
