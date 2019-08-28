@@ -4,6 +4,7 @@
 #include <fstream>
 #include <string>
 #include <signal.h>
+#include <math.h>
 #include "Calculator.pb.h"
 #include "../../libs/linberServiceWorker.h"
 
@@ -39,21 +40,35 @@ class calculator_service : public linberServiceWorker{
 		}
 		return ret;
 	}
+	float power(float a, float b){
+		return pow(a, b);
+	}
+	float square_root(float a){
+		return sqrt(a);
+	}
+
 	float compute(unsigned int operation, float a, float b){
 		float ret = 0;
 		switch(operation){
-			case 0:
+			case Calculator::SUM:
 				ret = sum(a, b);
 				break;
-			case 1:
+			case Calculator::DIFFERENCE:
 				ret = difference(a, b);
 				break;
-			case 2:
+			case Calculator::PRODUCT:
 				ret = product(a, b);
 				break;
-			case 3:
+			case Calculator::DIVISION:
 				ret = division(a, b);
 				break;
+			case Calculator::POW:
+				ret = power(a, b);
+				break;
+			case Calculator::SQRT:
+				ret = square_root(a);
+				break;
+
 			default:
 				break;
 		}

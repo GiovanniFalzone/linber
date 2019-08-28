@@ -6,6 +6,8 @@ enum operation_type {
 	DIFFERENCE = 1;
 	PRODUCT = 2;
 	DIVISION = 3;
+	POW = 4;
+	SQRT = 5;
 }
 
 message Calculator_request {
