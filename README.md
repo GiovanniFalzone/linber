@@ -37,8 +37,8 @@ The following data have been computed on a:\
 	L2 cache: 256K \
 	L3 cache: 8192K
 
-![Linber Sequence Diagram](/img/exec_time_1b_to_64Kb.png)
-![Linber Sequence Diagram](/img/exec_time_8Kb_to_2Mb.png)
+![Linber Sequence Diagram](/img/exec_time_mem_vs_shm.png)
+![Linber Sequence Diagram](/img/exec_time_shm.png)
 
 ## Linber API
 <img src="img/Linber_component_view.png" width="768">
