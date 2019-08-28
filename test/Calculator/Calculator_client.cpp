@@ -6,40 +6,115 @@
 
 using namespace std;
 
-int main(){
+class calculator_client{
 	Calculator::Calculator_request request_msg;
 	Calculator::Calculator_response response_msg;
+	char *service_uri;
+	int service_uri_len;
 	int request_len;
 	int response_len;
 	char* request;
 	char * response;
 	boolean response_shm_mode;
 
-	linber_init();
+	public:
+	calculator_client(){
+		service_uri = "org.calculator\0";
+		service_uri_len = strlen(service_uri);
+		linber_init();
+	}
 
-	for(int i=0; i < 100; i++){
+	~calculator_client(){
+		linber_exit();
+	}
+
+	float sum(float a, float b){
 		request_msg.Clear();
-		request_msg.set_operand_a(i);
-		request_msg.set_operand_b(i);
-		request_msg.set_operation(Calculator::PRODUCT);
-
+		request_msg.set_operand_a(a);
+		request_msg.set_operand_b(b);
+		request_msg.set_operation(Calculator::SUM);
 		request_len = request_msg.ByteSize();
 		request = (char*)malloc(request_len);
-
-		cout << request_msg.operation() <<"("<< request_msg.operand_a() <<","<< request_msg.operand_b() <<")" << "len:" << request_len << endl;
 		request_msg.SerializeToArray(request, request_len);
 
-		linber_request_service(	"org.calculator",sizeof("org.calculator1"),	\
+		linber_request_service(	service_uri, service_uri_len,				\
 								10, request, request_len,					\
 								&response, &response_len, &response_shm_mode);
 
 		response_msg.ParseFromArray(response, response_len);
-		cout << "Result: "<< response_msg.result() << endl;
-
-		free(request);
-		free(response);
+		linber_request_service_clean(request, FALSE, response, response_shm_mode);
+		return response_msg.result();
 	}
 
-	linber_exit();
+	float difference(float a, float b){
+		request_msg.Clear();
+		request_msg.set_operand_a(a);
+		request_msg.set_operand_b(b);
+		request_msg.set_operation(Calculator::DIFFERENCE);
+		request_len = request_msg.ByteSize();
+		request = (char*)malloc(request_len);
+		request_msg.SerializeToArray(request, request_len);
+
+		linber_request_service(	service_uri, service_uri_len,				\
+								10, request, request_len,					\
+								&response, &response_len, &response_shm_mode);
+
+		response_msg.ParseFromArray(response, response_len);
+		linber_request_service_clean(request, FALSE, response, response_shm_mode);
+		return response_msg.result();
+	}
+
+	float product(float a, float b){
+		request_msg.Clear();
+		request_msg.set_operand_a(a);
+		request_msg.set_operand_b(b);
+		request_msg.set_operation(Calculator::PRODUCT);
+		request_len = request_msg.ByteSize();
+		request = (char*)malloc(request_len);
+		request_msg.SerializeToArray(request, request_len);
+
+		linber_request_service(	service_uri, service_uri_len,				\
+								10, request, request_len,					\
+								&response, &response_len, &response_shm_mode);
+
+		response_msg.ParseFromArray(response, response_len);
+		linber_request_service_clean(request, FALSE, response, response_shm_mode);
+		return response_msg.result();
+	}
+
+	float division(float a, float b){
+		request_msg.Clear();
+		request_msg.set_operand_a(a);
+		request_msg.set_operand_b(b);
+		request_msg.set_operation(Calculator::DIVISION);
+		request_len = request_msg.ByteSize();
+		request = (char*)malloc(request_len);
+		request_msg.SerializeToArray(request, request_len);
+
+		linber_request_service(	service_uri, service_uri_len,				\
+								10, request, request_len,					\
+								&response, &response_len, &response_shm_mode);
+
+		response_msg.ParseFromArray(response, response_len);
+		linber_request_service_clean(request, FALSE, response, response_shm_mode);
+		return response_msg.result();
+	}
+};
+
+int main(){
+	calculator_client calc;
+
+	for(float i=0; i<10; i++){
+		printf("(%f %c %f) = ", i, '+', i);
+		cout << calc.sum(i, i) << endl;
+		printf("(%f %c %f) = ", i, '-', i);
+		cout << calc.difference(i, i) << endl;
+		printf("(%f %c %f) = ", i, '*', i);
+		cout << calc.product(i, i) << endl;
+		printf("(%f %c %f) = ", i, '/', i);
+		cout << calc.division(i, i) << endl;
+		cout << "--------------------------------\n" << endl;
+	}
+
 	return 0;
 }
