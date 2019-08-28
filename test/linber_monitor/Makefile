@@ -1,14 +1,19 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -pedantic -I.
+CFLAGS = -Wall -Wextra -pedantic
+LDLIBS = -pthread
+
 TARGET = linber_monitor
-DEP_LIBS = ../../libs/linber_ioctl.h
-DEP_LIBS += ../../libs/linber_service_api.h
+
+SRCS = ../../libs/linber_service_api.c
+
+DEPS = ../../libs/linber_service_api.h
+DEPS += ../../libs/linber_ioctl.h
 
 .PHONY:
 all: $(TARGET)
 
-%.o: %.c $(DEP_LIBS)
-	$(CC) -c -o $@ $< $(CFLAGS) $(LDLIBS)
+%: %.c $(DEPS) $(SRCS)
+	$(CC) -o $@ $< $(SRCS) $(CFLAGS) $(LDLIBS) 
 
 .PHONY:
 clean:
