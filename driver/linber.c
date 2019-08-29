@@ -11,6 +11,7 @@
 #include <linux/device.h>
 #include <linux/ioctl.h>
 #include <linux/random.h>
+#include <linux/kthread.h>
 
 #include "../libs/linber_ioctl.h"
 
@@ -119,6 +120,57 @@ struct linber_stuct{
 	unsigned int Max_Working;
 	struct mutex mutex;
 } linber;
+
+//-----------------------------------------------
+static void CBS_init(ServiceNode *ser_node){
+	//-----------------------------------------
+	ser_node->CBS_server.max_bandwidth = 4;
+	sema_init(&ser_node->CBS_server.sem_Q, ser_node->CBS_server.max_bandwidth);
+	//-----------------------------------------
+}
+
+static inline void CBS_refill(ServiceNode *ser_node){
+	mutex_lock(&ser_node->service_mutex);
+	while(ser_node->CBS_server.sem_Q.count < ser_node->CBS_server.max_bandwidth){
+		up(&ser_node->CBS_server.sem_Q);
+	}
+	mutex_unlock(&ser_node->service_mutex);
+}
+
+
+//-------------------------
+// check CBS Server bandwidth
+// if enough to execute reduce bandwith and proceed serving the request
+// else wait for refill
+//--------------------------
+static inline void CBS_job_check(ServiceNode *ser_node){
+	down(&ser_node->CBS_server.sem_Q);
+}
+
+
+//-------------------------
+// linber_thread is RT thread and every P millis refill the semaphore to max bandwidth
+// the task is running e.g at P/10 period and every time check the level of each service
+// if the bandwith is empty then reduce the priority of each worker for that service to MIN_PRIO
+// at P or every 10*(thread_period = P/10) a refill occour for each service and the workers receive a MAX_PRIO
+// so at most Q max bandiwth request can be served in P period
+//-------------------------
+static void linber_manager(void){
+	static int job_count = 1;
+	ServiceNode *ser_node = NULL;
+	mutex_lock(&linber.mutex);
+	list_for_each_entry(ser_node, &linber.Services, list){
+		if(job_count == 0){
+			CBS_refill(ser_node);
+		} else {
+			// CBS_check_bandwidth(ser_node);
+		}
+	}
+	mutex_unlock(&linber.mutex);
+	job_count = (job_count + 1)%10;
+}
+//------------------------------------------------------
+
 
 // ------------------------------------------------------
 static inline int initialize_queue(struct list_head *head){
@@ -258,40 +310,8 @@ static void destroy_service(ServiceNode *ser_node){
 	}
 }
 
-static void CBS_init(ServiceNode *ser_node){
-	//-----------------------------------------
-	ser_node->CBS_server.max_bandwidth = 4;
-	sema_init(&ser_node->CBS_server.sem_Q, ser_node->CBS_server.max_bandwidth);
-	//-----------------------------------------
-}
 
-static inline void CBS_refill(ServiceNode *ser_node){
-	//-------------------------
-	// linber_thread is RT thread and every P millis refill the semaphore to max bandwidth
-	// the task is running e.g at P/10 period and every time check the level of each service
-	// if the bandwith is empty then reduce the priority of each worker for that service to MIN_PRIO
-	// at P or every 10*(thread_period = P/10) a refill occour for each service and the workers receive a MAX_PRIO
-	// so at most Q max bandiwth request can be served in P period
-	//-------------------------
-
-	mutex_lock(&ser_node->service_mutex);
-	while(ser_node->CBS_server.sem_Q.count < ser_node->CBS_server.max_bandwidth){
-		up(&ser_noce->CBS_server.sem_Q);
-	}
-	mutex_unlock(&ser_node->service_mutex);
-}
-
-static inline void CBS_start_test(ServiceNode *ser_node){
-	//-------------------------
-	// check CBS Server bandwidth
-	// if enough to execute reduce bandwith and proceed serving the request
-	// else wait for refill
-	//--------------------------
-	down(&ser_node->CBS_server.sem_Q);
-}
-
-//------------------------------------------------------
-
+//-----------------------------------------------
 static ServiceNode * linber_create_service(linber_service_struct *obj){
 	int id = 0;
 	ServiceNode *ser_node = NULL;
@@ -472,7 +492,7 @@ static int get_and_load_request_to_slot(ServiceNode *ser_node, RequestNode **req
 	req_node = get_request(ser_node);
 	*req_node_ptr = req_node;
 	if(req_node != NULL){
-		CBS_start_test(ser_node);
+		CBS_job_check(ser_node);
 
 		slot->request = req_node;
 		mutex_lock(&ser_node->Serving_requests.Serving_mutex);

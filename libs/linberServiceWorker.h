@@ -48,6 +48,10 @@ public:
 		thread_worker = std::thread(&linberServiceWorker::worker_job, this);
 	}
 
+	virtual ~linberServiceWorker(){
+		free(service_uri);
+	}
+
 	void join_worker(){
 		if(thread_worker.joinable()){
 			thread_worker.join();
@@ -56,10 +60,6 @@ public:
 
 	void terminate_worker(){
 		worker_alive = false;
-	}
-
-	virtual ~linberServiceWorker(){
-		free(service_uri);
 	}
 
 	void worker_job(){
