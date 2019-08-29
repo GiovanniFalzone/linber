@@ -84,27 +84,41 @@ typedef struct ServiceNode{
 	struct list_head list;
 	unsigned long token;
 	char *uri;
-	int max_concurrent_workers;
-	int count_workers;
-	int next_worker_id;
 	int exec_time;
-	int num_requests;
+	int Request_count;
 	int serving_time;
 	bool destroy_me;
+
+	struct Workers{
+		int parallelism;
+		int count;
+		int next_id;
+		//--------------------------
+		// pids workers list task_struct *
+		//--------------------------
+		struct semaphore sem;
+	} Workers;
+
+	struct CBS{
+		int max_bandwidth;
+		struct semaphore sem_Q;
+	} CBS_server;
+
 	struct list_head RequestsHead;
 	struct list_head Completed_RequestsHead;
 	struct ServingRequests Serving_requests;
-	struct semaphore Workers_sem;
 	struct mutex service_mutex;
 }ServiceNode;
 
-struct list_head system_ServicesHead;
-struct idr system_Services_idr_Map;
-unsigned int system_services_count;
-unsigned int system_requests_count;
-unsigned int system_serving_requests_count;
-unsigned int system_max_concurrent_workers;
-struct mutex System_mutex;
+struct linber_stuct{
+	struct list_head Services;
+	struct idr Services_idr;
+	unsigned int Services_count;
+	unsigned int Request_count;
+	unsigned int Serving_count;
+	unsigned int Max_Working;
+	struct mutex mutex;
+} linber;
 
 // ------------------------------------------------------
 static inline int initialize_queue(struct list_head *head){
@@ -136,22 +150,22 @@ static RequestNode *Dequeue_Request(struct list_head *head){
 
 static ServiceNode* findService_by_id(int id){
 	ServiceNode *ser_node = NULL;
-	mutex_lock(&System_mutex);
-	ser_node = idr_find(&system_Services_idr_Map, id);
-	mutex_unlock(&System_mutex);
+	mutex_lock(&linber.mutex);
+	ser_node = idr_find(&linber.Services_idr, id);
+	mutex_unlock(&linber.mutex);
 	return ser_node;
 }
 
 static ServiceNode* findService(char *uri){
 	ServiceNode *ser_node = NULL;
-	mutex_lock(&System_mutex);
-	list_for_each_entry(ser_node, &system_ServicesHead, list){
+	mutex_lock(&linber.mutex);
+	list_for_each_entry(ser_node, &linber.Services, list){
 		if(strcmp(ser_node->uri, uri) == 0){
-			mutex_unlock(&System_mutex);
+			mutex_unlock(&linber.mutex);
 			return ser_node;
 		}
 	}
-	mutex_unlock(&System_mutex);
+	mutex_unlock(&linber.mutex);
 	return NULL;
 }
 
@@ -160,7 +174,7 @@ static RequestNode* findWaiting_or_Completed_Request(ServiceNode* ser_node, unsi
 	int i = 0;
 	mutex_lock(&ser_node->service_mutex);
 	// search in waiting
-	list_for_each_entry(node, &system_ServicesHead, list){
+	list_for_each_entry(node, &linber.Services, list){
 		if(node->token == token){
 			req_node = node;
 			mutex_unlock(&ser_node->service_mutex);
@@ -196,6 +210,17 @@ static inline void destroy_request(RequestNode *req_node){
 	up(&req_node->Request_sem);	// wake up client
 }
 
+static inline void clean_service(ServiceNode *ser_node){
+	linber.Services_count--;
+	list_del(&ser_node->list);
+	kfree(ser_node->uri);
+	linber.Max_Working -= ser_node->Workers.parallelism;
+	kfree(ser_node->Serving_requests.Serving_slots_arr);
+	mutex_unlock(&ser_node->service_mutex);
+	idr_remove(&linber.Services_idr, ser_node->id);
+	kfree(ser_node);	// done by last worker
+}
+
 static void destroy_service(ServiceNode *ser_node){
 	int i = 0;
 	RequestNode *req_node, *next;
@@ -206,32 +231,63 @@ static void destroy_service(ServiceNode *ser_node){
 		list_del(&req_node->list);
 		destroy_request(req_node);
 	}
-	system_requests_count -= i;
+	linber.Request_count -= i;
 	
 	list_for_each_entry_safe(req_node, next, &ser_node->Completed_RequestsHead, list){
 		list_del(&req_node->list);
 		destroy_request(req_node);
 	}
 
-	for(i=0; i<ser_node->count_workers; i++){
-		up(&ser_node->Workers_sem);
+	for(i=0; i<ser_node->Workers.count; i++){
+		up(&ser_node->Workers.sem);
 	}
-	for(i=0; i<ser_node->max_concurrent_workers; i++){
+	for(i=0; i<ser_node->Workers.parallelism; i++){
 		mutex_unlock(&ser_node->Serving_requests.Serving_slots_arr[i].slot_mutex);
 	}
+
+	//------------------------
+	// destroy workers pid list
+	//------------------------
+
 	ser_node->destroy_me = true;
-	if(ser_node->count_workers <= 0){
-		system_services_count--;
-		list_del(&ser_node->list);
-		kfree(ser_node->uri);
-		system_max_concurrent_workers -= ser_node->max_concurrent_workers;
-		kfree(ser_node->Serving_requests.Serving_slots_arr);
-		mutex_unlock(&ser_node->service_mutex);
-		idr_remove(&system_Services_idr_Map, ser_node->id);
-		kfree(ser_node);	// done by last worker
+
+	if(ser_node->Workers.count <= 0){
+		clean_service(ser_node);
 	} else {
 		mutex_unlock(&ser_node->service_mutex);
 	}
+}
+
+static void CBS_init(ServiceNode *ser_node){
+	//-----------------------------------------
+	ser_node->CBS_server.max_bandwidth = 4;
+	sema_init(&ser_node->CBS_server.sem_Q, ser_node->CBS_server.max_bandwidth);
+	//-----------------------------------------
+}
+
+static inline void CBS_refill(ServiceNode *ser_node){
+	//-------------------------
+	// linber_thread is RT thread and every P millis refill the semaphore to max bandwidth
+	// the task is running e.g at P/10 period and every time check the level of each service
+	// if the bandwith is empty then reduce the priority of each worker for that service to MIN_PRIO
+	// at P or every 10*(thread_period = P/10) a refill occour for each service and the workers receive a MAX_PRIO
+	// so at most Q max bandiwth request can be served in P period
+	//-------------------------
+
+	mutex_lock(&ser_node->service_mutex);
+	while(ser_node->CBS_server.sem_Q.count < ser_node->CBS_server.max_bandwidth){
+		up(&ser_noce->CBS_server.sem_Q);
+	}
+	mutex_unlock(&ser_node->service_mutex);
+}
+
+static inline void CBS_start_test(ServiceNode *ser_node){
+	//-------------------------
+	// check CBS Server bandwidth
+	// if enough to execute reduce bandwith and proceed serving the request
+	// else wait for refill
+	//--------------------------
+	down(&ser_node->CBS_server.sem_Q);
 }
 
 //------------------------------------------------------
@@ -245,17 +301,20 @@ static ServiceNode * linber_create_service(linber_service_struct *obj){
 	get_random_bytes(&ser_node->token, sizeof(ser_node->token));
 	ser_node->uri = obj->service_uri;
 	ser_node->exec_time = obj->op_params.registration.exec_time;
-	ser_node->max_concurrent_workers = obj->op_params.registration.max_concurrent_workers;
-	ser_node->num_requests = 0;
+	ser_node->Workers.parallelism = obj->op_params.registration.Max_Working;
+	ser_node->Request_count = 0;
 	ser_node->serving_time = 0;
-	ser_node->next_worker_id = 0;
-	ser_node->count_workers = 0;
+	ser_node->Workers.next_id = 0;
+	ser_node->Workers.count = 0;
 	ser_node->destroy_me = false;
 	ser_node->Serving_requests.serving_count = 0;
-	ser_node->Serving_requests.max_slots = ser_node->max_concurrent_workers;
+	ser_node->Serving_requests.max_slots = ser_node->Workers.parallelism;
 	ser_node->Serving_requests.minimum_slots = 1;
 	ser_node->Serving_requests.num_active_slots = ser_node->Serving_requests.minimum_slots;
 	ser_node->Serving_requests.Serving_slots_arr = kmalloc(ser_node->Serving_requests.max_slots*sizeof(request_slot), GFP_KERNEL);
+
+	CBS_init(ser_node);
+
 	for(id=0; id<ser_node->Serving_requests.max_slots; id++){
 		mutex_init(&ser_node->Serving_requests.Serving_slots_arr[id].slot_mutex);
 		ser_node->Serving_requests.Serving_slots_arr[id].request = NULL;
@@ -263,19 +322,19 @@ static ServiceNode * linber_create_service(linber_service_struct *obj){
 
 	mutex_init(&ser_node->Serving_requests.Serving_mutex);
 	mutex_init(&ser_node->service_mutex);
-	sema_init(&ser_node->Workers_sem, 0);
-	mutex_lock(&System_mutex);
-		list_add_tail(&ser_node->list, &system_ServicesHead);
-		id = idr_alloc(&system_Services_idr_Map, (void*)ser_node, 0, MAX_SERVICES, GFP_KERNEL);
+	sema_init(&ser_node->Workers.sem, 0);
+	mutex_lock(&linber.mutex);
+		list_add_tail(&ser_node->list, &linber.Services);
+		id = idr_alloc(&linber.Services_idr, (void*)ser_node, 0, MAX_SERVICES, GFP_KERNEL);
 		if(id < 0){
 			kfree(ser_node);
 			return NULL;
 		}
-		system_services_count++;
-		system_max_concurrent_workers += ser_node->max_concurrent_workers;
-	mutex_unlock(&System_mutex);
+		linber.Services_count++;
+		linber.Max_Working += ser_node->Workers.parallelism;
+	mutex_unlock(&linber.mutex);
 	ser_node->id = id;
-	printk(KERN_INFO "linber::  New Service token:%lu %s, workers:%d,  exec time:%d\n", ser_node->token, ser_node->uri, ser_node->max_concurrent_workers, ser_node->exec_time);
+	printk(KERN_INFO "linber::  New Service token:%lu %s, workers:%d,  exec time:%d\n", ser_node->token, ser_node->uri, ser_node->Workers.parallelism, ser_node->exec_time);
 	return ser_node;
 }
 
@@ -293,16 +352,16 @@ static RequestNode* enqueue_request_for_service(ServiceNode *ser_node, char *req
 		req_node->request_len = request_len;
 
 		mutex_lock(&ser_node->service_mutex);
-			ser_node->num_requests++;
+			ser_node->Request_count++;
 			ser_node->serving_time += ser_node->exec_time;
 			list_add_tail(&req_node->list, &ser_node->RequestsHead);
-			mutex_lock(&System_mutex);
-				system_requests_count++;
-			mutex_unlock(&System_mutex);
+			mutex_lock(&linber.mutex);
+				linber.Request_count++;
+			mutex_unlock(&linber.mutex);
 		mutex_unlock(&ser_node->service_mutex);
 
 		req_node->request_accepted = true;
-		up(&ser_node->Workers_sem);
+		up(&ser_node->Workers.sem);
 		if(blocking){
 			down(&req_node->Request_sem);
 		}
@@ -334,7 +393,7 @@ static RequestNode* get_request(ServiceNode* ser_node){
 	mutex_lock(&ser_node->service_mutex);
 		req_node = Dequeue_Request(&ser_node->RequestsHead);
 		if(req_node != NULL){
-			ser_node->num_requests--;
+			ser_node->Request_count--;
 			ser_node->serving_time -= ser_node->exec_time;
 			if(!req_node->request_accepted){
 				kfree(req_node->request.data);
@@ -370,7 +429,7 @@ static unsigned int get_slot(ServiceNode *ser_node, unsigned int worker_id, requ
 
 static inline void decrease_workers(ServiceNode *ser_node){
 	mutex_lock(&ser_node->service_mutex);
-	ser_node->count_workers--;
+	ser_node->Workers.count--;
 	mutex_unlock(&ser_node->service_mutex);
 }
 
@@ -385,16 +444,9 @@ static int Service_check_Worker(ServiceNode *ser_node, unsigned long service_tok
 static int Service_check_alive(ServiceNode *ser_node){
 	mutex_lock(&ser_node->service_mutex);
 		if(ser_node->destroy_me){	// check if must be destroied
-			ser_node->count_workers--;
-			if(ser_node->count_workers <= 0){
-				system_services_count--;
-				list_del(&ser_node->list);
-				kfree(ser_node->uri);
-				system_max_concurrent_workers -= ser_node->max_concurrent_workers;
-				kfree(ser_node->Serving_requests.Serving_slots_arr);
-				mutex_unlock(&ser_node->service_mutex);
-				kfree(ser_node);	// done by last worker
-				printk(KERN_INFO "linber:: Service destroyied\n");
+			ser_node->Workers.count--;
+			if(ser_node->Workers.count <= 0){
+				clean_service(ser_node);
 				return -1;
 			} else {
 				mutex_unlock(&ser_node->service_mutex);
@@ -408,7 +460,7 @@ static int Service_check_alive(ServiceNode *ser_node){
 static int get_and_load_request_to_slot(ServiceNode *ser_node, RequestNode **req_node_ptr, request_slot **slot_ptr, unsigned int *slot_id, unsigned int worker_id){
 	request_slot *slot;
 	RequestNode *req_node;
-	down_interruptible(&ser_node->Workers_sem);		// wait for request
+	down_interruptible(&ser_node->Workers.sem);		// wait for request
 
 	if(Service_check_alive(ser_node) < 0){
 		return -1;
@@ -420,14 +472,16 @@ static int get_and_load_request_to_slot(ServiceNode *ser_node, RequestNode **req
 	req_node = get_request(ser_node);
 	*req_node_ptr = req_node;
 	if(req_node != NULL){
+		CBS_start_test(ser_node);
+
 		slot->request = req_node;
 		mutex_lock(&ser_node->Serving_requests.Serving_mutex);
 			ser_node->Serving_requests.serving_count++;
+			mutex_lock(&linber.mutex);
+				linber.Request_count--;
+				linber.Serving_count++;
+			mutex_unlock(&linber.mutex);
 		mutex_unlock(&ser_node->Serving_requests.Serving_mutex);
-		mutex_lock(&System_mutex);
-			system_requests_count--;
-			system_serving_requests_count++;
-		mutex_unlock(&System_mutex);
 	}
 	return 0;
 }
@@ -444,9 +498,9 @@ static void unload_slot_and_get_request(ServiceNode *ser_node, RequestNode **req
 			slot->request = NULL;
 			mutex_lock(&ser_node->Serving_requests.Serving_mutex);
 				ser_node->Serving_requests.serving_count--;
-				mutex_lock(&System_mutex);
-					system_serving_requests_count--;
-				mutex_unlock(&System_mutex);
+				mutex_lock(&linber.mutex);
+					linber.Serving_count--;
+				mutex_unlock(&linber.mutex);
 			mutex_unlock(&ser_node->Serving_requests.Serving_mutex);
 			mutex_unlock(&slot->slot_mutex);	// release slot
 		}
@@ -454,7 +508,7 @@ static void unload_slot_and_get_request(ServiceNode *ser_node, RequestNode **req
 }
 
 static inline void service_load_balancing(ServiceNode *ser_node){
-	if(ser_node->num_requests > ser_node->Serving_requests.num_active_slots){
+	if(ser_node->Request_count > ser_node->Serving_requests.num_active_slots){
 		ser_node->Serving_requests.num_active_slots++;
 		if(ser_node->Serving_requests.num_active_slots > ser_node->Serving_requests.max_slots){
 			ser_node->Serving_requests.num_active_slots = ser_node->Serving_requests.max_slots;
@@ -591,8 +645,11 @@ static int linber_register_service_worker(linber_service_struct *obj){
 			return -1;
 		}
 		mutex_lock(&ser_node->service_mutex);
-			ser_node->count_workers++;
-			worker_id = ser_node->next_worker_id++;
+			ser_node->Workers.count++;
+			worker_id = ser_node->Workers.next_id++;
+			//--------------------
+			// insert current pid in workers pid list
+			//--------------------
 		mutex_unlock(&ser_node->service_mutex);
 		checkMemoryError(put_user(worker_id, obj->op_params.register_worker.ptr_worker_id));
 	}
@@ -739,21 +796,21 @@ static int linber_get_system_status(void* system_user){
 	int i = 0;
 
 	checkMemoryError(copy_from_user(&system, system_user, sizeof(system_status)));
-	system.max_concurrent_workers = system_max_concurrent_workers;
-	system.requests_count = system_requests_count;
-	system.serving_requests_count = system_serving_requests_count;
-	system.services_count = system_services_count;
-	if(system_services_count > 0){
+	system.Max_Working = linber.Max_Working;
+	system.requests_count = linber.Request_count;
+	system.serving_requests_count = linber.Serving_count;
+	system.services_count = linber.Services_count;
+	if(linber.Services_count > 0){
 		checkMemoryError(copy_from_user(services, system.services, MAX_SERVICES * sizeof(service_status)));
-		mutex_lock(&System_mutex);
-		list_for_each_entry(ser_node, &system_ServicesHead, list){
-			if(i < system_services_count){
+		mutex_lock(&linber.mutex);
+		list_for_each_entry(ser_node, &linber.Services, list){
+			if(i < linber.Services_count){
 				mutex_lock(&ser_node->service_mutex);
 				services[i].uri_len = strlen(ser_node->uri);
 				checkMemoryError(copy_to_user(services[i].uri, ser_node->uri, services[i].uri_len));
 				services[i].exec_time = ser_node->exec_time;
-				services[i].max_concurrent_workers = ser_node->max_concurrent_workers;
-				services[i].requests_count = ser_node->num_requests;
+				services[i].Max_Working = ser_node->Workers.parallelism;
+				services[i].requests_count = ser_node->Request_count;
 				services[i].serving_requests_count = ser_node->Serving_requests.serving_count;
 				services[i].serving_time = 0;
 				if(ser_node->serving_time > 0 && ser_node->Serving_requests.num_active_slots > 0){
@@ -766,10 +823,10 @@ static int linber_get_system_status(void* system_user){
 			}
 			i++;
 		}
-		mutex_unlock(&System_mutex);
+		mutex_unlock(&linber.mutex);
 	}
 	checkMemoryError(copy_to_user(system_user, &system, sizeof(system_status)));
-	checkMemoryError(copy_to_user(system.services, services, system_services_count * sizeof(service_status)));
+	checkMemoryError(copy_to_user(system.services, services, linber.Services_count * sizeof(service_status)));
 	kfree(services);
 	return 0;
 }
@@ -881,25 +938,25 @@ int init_module(void) {
 		return PTR_ERR(dev_device);
 	}
 
-	initialize_queue(&system_ServicesHead);
-	idr_init(&system_Services_idr_Map);
+	initialize_queue(&linber.Services);
+	idr_init(&linber.Services_idr);
 
-	system_requests_count = 0;
-	system_serving_requests_count = 0;
-	system_max_concurrent_workers = 0;
-	mutex_init(&System_mutex);
+	linber.Request_count = 0;
+	linber.Serving_count = 0;
+	linber.Max_Working = 0;
+	mutex_init(&linber.mutex);
 
 	return 0;
 }
 
 void cleanup_module(void) {
 	ServiceNode *ser_node, *next;
-	list_for_each_entry_safe(ser_node, next, &system_ServicesHead, list){
+	list_for_each_entry_safe(ser_node, next, &linber.Services, list){
 		list_del(&ser_node->list);
 		destroy_service(ser_node);
 	}
 
-	idr_destroy(&system_Services_idr_Map);
+	idr_destroy(&linber.Services_idr);
 
 	printk(KERN_INFO "linber:: Destroying device %s\n", CLA_NAME);
 	device_destroy(dev_class, MKDEV(dev_major, 0));
