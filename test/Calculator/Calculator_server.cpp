@@ -19,11 +19,6 @@ class calculator_service : public linberServiceWorker{
 					 : linberServiceWorker(service_uri, service_id, service_token){
 	}
 
-	~calculator_service(){
-		free(request);
-		free(response);
-	}
-
 	float sum(float a, float b){
 		return a + b;
 	}
@@ -135,7 +130,6 @@ int main(){
 		delete calculator_workers[i];
 	}
 
-	linber_destroy_service(str_uri, uri_len, service_token);
 	linber_exit();
 
 	return 0;
