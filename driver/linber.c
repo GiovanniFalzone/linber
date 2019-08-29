@@ -162,9 +162,9 @@ void CBS_check_bandwidth(ServiceNode *ser_node){
 	struct task_struct *worker;
 	if(ser_node->CBS_server.sem_Q.count <= 0){
 		for(i=0; i<ser_node->Serving_requests.max_slots; i++){
-//			worker = ser_node->Serving_requests.Serving_slots_arr[i].worker;
+			worker = ser_node->Serving_requests.Serving_slots_arr[i].worker;
 			if(worker != NULL){
-				//			
+				worker->prio = 0;
 			}
 		}
 	}
