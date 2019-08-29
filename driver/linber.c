@@ -132,7 +132,9 @@ static void CBS_init(ServiceNode *ser_node){
 static inline void CBS_refill(ServiceNode *ser_node){
 	int i=0;
 	mutex_lock(&ser_node->service_mutex);
+	#ifdef DEBUG
 	printk(KERN_INFO "Linber:: ------------Refill for %s------------------\n", ser_node->uri);
+	#endif
 	while(	(ser_node->CBS_server.sem_Q.count < ser_node->CBS_server.max_bandwidth) && 	\
 			(i++ < ser_node->CBS_server.max_bandwidth)){
 		up(&ser_node->CBS_server.sem_Q);
@@ -148,8 +150,10 @@ static inline void CBS_refill(ServiceNode *ser_node){
 //--------------------------
 static inline void CBS_job_check(ServiceNode *ser_node){
 	down(&ser_node->CBS_server.sem_Q);
-	current->static_prio = NICE_TO_PRIO(MIN_NICE);	// max priority
-	printk(KERN_INFO "Linber:: Wroker for %s working\n", ser_node->uri);
+	current->static_prio = NICE_TO_PRIO(MIN_NICE + 1);
+	#ifdef DEBUG
+	printk(KERN_INFO "Linber:: Worker for %s working prio:%d\n", ser_node->uri, current->static_prio);
+	#endif
 }
 
 
@@ -163,8 +167,11 @@ void CBS_check_bandwidth(ServiceNode *ser_node){
 	if(ser_node->CBS_server.sem_Q.count <= 0){
 		for(i=0; i<ser_node->Serving_requests.max_slots; i++){
 			worker = ser_node->Serving_requests.Serving_slots_arr[i].worker;
-			if(worker != NULL){
+			if(worker != NULL){				
 				worker->static_prio = NICE_TO_PRIO(MAX_NICE);	// min priority
+				#ifdef DEBUG
+				printk(KERN_INFO "Linber:: Bandwidth exausted, Worker for %s working prio:%d\n", ser_node->uri, current->static_prio);
+				#endif
 			}
 		}
 	}
@@ -180,6 +187,7 @@ void CBS_check_bandwidth(ServiceNode *ser_node){
 static int linber_manager_job(void* args){
 	static int job_count = 1;
 	ServiceNode *ser_node = NULL;
+	current->static_prio = NICE_TO_PRIO(MIN_NICE);	// max priority
 	while(!kthread_should_stop()){
 		mutex_lock(&linber.mutex);
 		list_for_each_entry(ser_node, &linber.Services, list){
@@ -190,8 +198,8 @@ static int linber_manager_job(void* args){
 			}
 		}
 		mutex_unlock(&linber.mutex);
-		job_count = (job_count + 1)%10;
-		msleep(100);
+		job_count = (job_count + 1)%100;
+		msleep(10);
 	}
 	return 0;
 }
@@ -371,6 +379,7 @@ static ServiceNode * linber_create_service(linber_service_struct *obj){
 	for(id=0; id<ser_node->Serving_requests.max_slots; id++){
 		mutex_init(&ser_node->Serving_requests.Serving_slots_arr[id].slot_mutex);
 		ser_node->Serving_requests.Serving_slots_arr[id].request = NULL;
+		ser_node->Serving_requests.Serving_slots_arr[id].worker = NULL;
 	}
 
 	mutex_init(&ser_node->Serving_requests.Serving_mutex);
