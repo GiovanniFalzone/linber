@@ -68,6 +68,7 @@ typedef struct RequestNode{
 
 typedef struct request_slot{
 	RequestNode *request; // array serving requests, size max workers
+	struct task_struct *worker;
 	struct mutex slot_mutex;
 }request_slot;
 
@@ -95,9 +96,6 @@ typedef struct ServiceNode{
 		int parallelism;
 		int count;
 		int next_id;
-		//--------------------------
-		// pids workers list task_struct *
-		//--------------------------
 		struct semaphore sem;
 	} Workers;
 
@@ -150,9 +148,27 @@ static inline void CBS_refill(ServiceNode *ser_node){
 //--------------------------
 static inline void CBS_job_check(ServiceNode *ser_node){
 	down(&ser_node->CBS_server.sem_Q);
+	current->prio = -19;	// max priority
 	printk(KERN_INFO "Linber:: Wroker for %s working\n", ser_node->uri);
 }
 
+
+//-------------------------
+// if no budget then lower priority to avoid that a worker of a service
+// can steal execution time to the others, accuracy 10%
+//-------------------------
+void CBS_check_bandwidth(ServiceNode *ser_node){
+	int i;
+	struct task_struct *worker;
+	if(ser_node->CBS_server.sem_Q.count <= 0){
+		for(i=0; i<ser_node->Serving_requests.max_slots; i++){
+//			worker = ser_node->Serving_requests.Serving_slots_arr[i].worker;
+			if(worker != NULL){
+				//			
+			}
+		}
+	}
+}
 
 //-------------------------
 // linber_thread is RT thread and every P millis refill the semaphore to max bandwidth
@@ -170,7 +186,7 @@ static int linber_manager_job(void* args){
 			if(job_count == 0){
 				CBS_refill(ser_node);
 			} else {
-				// CBS_check_bandwidth(ser_node);
+				CBS_check_bandwidth(ser_node);
 			}
 		}
 		mutex_unlock(&linber.mutex);
@@ -317,10 +333,6 @@ static void destroy_service(ServiceNode *ser_node){
 	for(i=0; i<ser_node->Workers.parallelism; i++){
 		mutex_unlock(&ser_node->Serving_requests.Serving_slots_arr[i].slot_mutex);
 	}
-
-	//------------------------
-	// destroy workers pid list
-	//------------------------
 
 	ser_node->destroy_me = true;
 
@@ -513,6 +525,7 @@ static int get_and_load_request_to_slot(ServiceNode *ser_node, RequestNode **req
 	req_node = get_request(ser_node);
 	*req_node_ptr = req_node;
 	if(req_node != NULL){
+		slot->worker = current;
 		CBS_job_check(ser_node);
 
 		slot->request = req_node;
@@ -536,6 +549,7 @@ static void unload_slot_and_get_request(ServiceNode *ser_node, RequestNode **req
 		req_node = slot->request;
 		*req_node_ptr = req_node;
 		if(req_node != NULL){
+			slot->worker = NULL;
 			slot->request = NULL;
 			mutex_lock(&ser_node->Serving_requests.Serving_mutex);
 				ser_node->Serving_requests.serving_count--;
@@ -688,9 +702,6 @@ static int linber_register_service_worker(linber_service_struct *obj){
 		mutex_lock(&ser_node->service_mutex);
 			ser_node->Workers.count++;
 			worker_id = ser_node->Workers.next_id++;
-			//--------------------
-			// insert current pid in workers pid list
-			//--------------------
 		mutex_unlock(&ser_node->service_mutex);
 		checkMemoryError(put_user(worker_id, obj->op_params.register_worker.ptr_worker_id));
 	}
