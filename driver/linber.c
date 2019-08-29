@@ -148,7 +148,7 @@ static inline void CBS_refill(ServiceNode *ser_node){
 //--------------------------
 static inline void CBS_job_check(ServiceNode *ser_node){
 	down(&ser_node->CBS_server.sem_Q);
-	current->prio = -19;	// max priority
+	current->static_prio = NICE_TO_PRIO(MIN_NICE);	// max priority
 	printk(KERN_INFO "Linber:: Wroker for %s working\n", ser_node->uri);
 }
 
@@ -164,7 +164,7 @@ void CBS_check_bandwidth(ServiceNode *ser_node){
 		for(i=0; i<ser_node->Serving_requests.max_slots; i++){
 			worker = ser_node->Serving_requests.Serving_slots_arr[i].worker;
 			if(worker != NULL){
-				worker->prio = 0;
+				worker->static_prio = NICE_TO_PRIO(MAX_NICE);	// min priority
 			}
 		}
 	}
