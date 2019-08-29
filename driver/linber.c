@@ -11,6 +11,7 @@
 #include <linux/device.h>
 #include <linux/ioctl.h>
 #include <linux/random.h>
+#include <linux/delay.h>
 #include <linux/kthread.h>
 
 #include "../libs/linber_ioctl.h"
@@ -112,6 +113,7 @@ typedef struct ServiceNode{
 }ServiceNode;
 
 struct linber_stuct{
+	struct task_struct *linber_manager;
 	struct list_head Services;
 	struct idr Services_idr;
 	unsigned int Services_count;
@@ -130,8 +132,11 @@ static void CBS_init(ServiceNode *ser_node){
 }
 
 static inline void CBS_refill(ServiceNode *ser_node){
+	int i=0;
 	mutex_lock(&ser_node->service_mutex);
-	while(ser_node->CBS_server.sem_Q.count < ser_node->CBS_server.max_bandwidth){
+	printk(KERN_INFO "Linber:: ------------Refill for %s------------------\n", ser_node->uri);
+	while(	(ser_node->CBS_server.sem_Q.count < ser_node->CBS_server.max_bandwidth) && 	\
+			(i++ < ser_node->CBS_server.max_bandwidth)){
 		up(&ser_node->CBS_server.sem_Q);
 	}
 	mutex_unlock(&ser_node->service_mutex);
@@ -145,6 +150,7 @@ static inline void CBS_refill(ServiceNode *ser_node){
 //--------------------------
 static inline void CBS_job_check(ServiceNode *ser_node){
 	down(&ser_node->CBS_server.sem_Q);
+	printk(KERN_INFO "Linber:: Wroker for %s working\n", ser_node->uri);
 }
 
 
@@ -155,19 +161,34 @@ static inline void CBS_job_check(ServiceNode *ser_node){
 // at P or every 10*(thread_period = P/10) a refill occour for each service and the workers receive a MAX_PRIO
 // so at most Q max bandiwth request can be served in P period
 //-------------------------
-static void linber_manager(void){
+static int linber_manager_job(void* args){
 	static int job_count = 1;
 	ServiceNode *ser_node = NULL;
-	mutex_lock(&linber.mutex);
-	list_for_each_entry(ser_node, &linber.Services, list){
-		if(job_count == 0){
-			CBS_refill(ser_node);
-		} else {
-			// CBS_check_bandwidth(ser_node);
+	while(!kthread_should_stop()){
+		mutex_lock(&linber.mutex);
+		list_for_each_entry(ser_node, &linber.Services, list){
+			if(job_count == 0){
+				CBS_refill(ser_node);
+			} else {
+				// CBS_check_bandwidth(ser_node);
+			}
 		}
+		mutex_unlock(&linber.mutex);
+		job_count = (job_count + 1)%10;
+		msleep(100);
 	}
-	mutex_unlock(&linber.mutex);
-	job_count = (job_count + 1)%10;
+	return 0;
+}
+
+static void linber_manager_init(void){
+	printk(KERN_INFO "Linber:: Creating Linber task manager\n");
+	linber.linber_manager = kthread_create(linber_manager_job, NULL, "linber_manager");
+	if(linber.linber_manager){
+		printk(KERN_INFO "Linber:: Manager Created Sucessfully\n");
+		wake_up_process(linber.linber_manager);
+	} else {
+		printk(KERN_ALERT "Linber:: Thread Creation Failed\n");
+	}
 }
 //------------------------------------------------------
 
@@ -960,17 +981,22 @@ int init_module(void) {
 
 	initialize_queue(&linber.Services);
 	idr_init(&linber.Services_idr);
-
 	linber.Request_count = 0;
 	linber.Serving_count = 0;
 	linber.Max_Working = 0;
 	mutex_init(&linber.mutex);
+	linber_manager_init();
 
 	return 0;
 }
 
 void cleanup_module(void) {
 	ServiceNode *ser_node, *next;
+
+	if(!kthread_stop(linber.linber_manager)){
+		printk(KERN_ALERT "Linber:: manager stopped");
+	}
+
 	list_for_each_entry_safe(ser_node, next, &linber.Services, list){
 		list_del(&ser_node->list);
 		destroy_service(ser_node);
