@@ -1,3 +1,5 @@
+.DEFAULT_GOAL := help
+
 .PHONY:
 all: linber tests
 
@@ -21,10 +23,14 @@ rmmod:
 updatemod: linber rmmod insmod
 
 .PHONY:
-help:
-	@echo "[all] | [linber] | [tests] | [insmod] | [rmmod] | [updatemod] | [clean] "
+monitor:
+	./test/linber_monitor/linber_monitor 100
 
 .PHONY:
 clean:
 	cd driver && make clean
 	cd test && make clean
+
+.PHONY:
+help:
+	@echo "[all] | [linber] | [tests] | [insmod] | [rmmod] | [updatemod] | [clean]"
