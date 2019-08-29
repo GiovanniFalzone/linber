@@ -57,16 +57,16 @@ void *thread_job(void *args){
 	if(abort_request == 0){
 		gettimeofday(&start, NULL);
 		if(worker.blocking == 1){
+			printf("sending Blocking request id:%d, service:%s\n", worker.id, worker.service_uri);
 			ret = linber_request_service_shm(	worker.service_uri, worker.uri_len,	\
 												REL_DEADLINE, request_shm_key, request_len,	\
 												&response, &response_len, &response_shm_mode);
-			printf("sending Blocking request id:%d, service:%s\n", worker.id, worker.service_uri);
 		} else {
+			printf("sending NON Blocking request id:%d, service:%s\n", worker.id, worker.service_uri);
 			ret = linber_request_service_no_blocking_shm(	worker.service_uri, worker.uri_len,		\
 															REL_DEADLINE, request_shm_key, request_len,		\
 															&token);
 			if(ret >= 0){
-				printf("sending NON Blocking request id:%d, service:%s\n", worker.id, worker.service_uri);
 				sleep(1);
 				printf("Asking for response request id:%d, service:%s\n", worker.id, worker.service_uri);
 				ret = linber_request_service_get_response(	worker.service_uri, worker.uri_len,						\

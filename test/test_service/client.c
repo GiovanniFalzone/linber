@@ -12,7 +12,7 @@
 #define DEFAULT_SERVICE_URI	"org.service\0"
 #define REL_DEADLINE		10
 #define DEFAULT_CONCURRENT_REQUESTS	10
-#define DEFAULT_MAX_INTER_PERIOD	100
+#define DEFAULT_MAX_INTER_PERIOD	1
 
 typedef struct{
 	pthread_t tid;
@@ -49,17 +49,17 @@ void *thread_job(void *args){
 	if(abort_request == 0){
 		gettimeofday(&start, NULL);
 		if(worker.blocking == 1){
+			printf("sending Blocking request id:%d, service:%s\n", worker.id, worker.service_uri);
 			ret = linber_request_service(	worker.service_uri, worker.uri_len,	\
 											REL_DEADLINE, request, request_len,	\
 											&response, &response_len, &response_shm_mode);
 
-			printf("sending Blocking request id:%d, service:%s\n", worker.id, worker.service_uri);
 		} else {
+			printf("sending NON Blocking request id:%d, service:%s\n", worker.id, worker.service_uri);
 			ret = linber_request_service_no_blocking(	worker.service_uri, worker.uri_len,	\
 														REL_DEADLINE, request, request_len,	\
 														&token);
 			if(ret >= 0){
-				printf("sending NON Blocking request id:%d, service:%s\n", worker.id, worker.service_uri);
 				sleep(1);
 				printf("Asking for response request id:%d, service:%s\n", worker.id, worker.service_uri);
 				ret = linber_request_service_get_response(	worker.service_uri, worker.uri_len,	\
@@ -102,6 +102,7 @@ int main(int argc,char* argv[]){
 			max_inter_request = n;
 		}
 	}
+
 	printf("Running client test with %d concurrent requests on service %s\n", concurrent_requests, service_uri);
 	linber_init();
 
@@ -115,6 +116,7 @@ int main(int argc,char* argv[]){
 		} else {
 			worker[i].blocking = 1;
 		}
+		worker[i].blocking = 1;
 		usleep(1000*(rand()%max_inter_request + 1));
 		int terr = pthread_create(&worker[i].tid, NULL, thread_job, (void*)&worker[i]);
 		if (terr != 0){
