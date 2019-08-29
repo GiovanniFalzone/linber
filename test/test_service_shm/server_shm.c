@@ -93,7 +93,7 @@ void *thread_job(void *args){
 }
 
 int main(int argc,char* argv[]){
-	int max_concurrent_workers = DEFAULT_MAX_CONCURRENT_WORKERS;
+	int Max_Working = DEFAULT_MAX_CONCURRENT_WORKERS;
 	int job_exec_time = DEFAULT_JOB_EXEC_TIME;
 	if (signal(SIGINT, sig_handler) == SIG_ERR)
 		printf("can't catch SIGINT\n");
@@ -109,7 +109,7 @@ int main(int argc,char* argv[]){
 	if(argc >= 3){
 		int n = atoi(argv[2]);
 		if(n > 0){
-			max_concurrent_workers = n;
+			Max_Working = n;
 		}
 	}
 
@@ -122,12 +122,12 @@ int main(int argc,char* argv[]){
 
 	uri_len = strlen(service_uri);
 
-	printf("Running Service Server %s with %d workers, job exec time:%d\n", service_uri, max_concurrent_workers, job_exec_time);
+	printf("Running Service Server %s with %d workers, job exec time:%d\n", service_uri, Max_Working, job_exec_time);
 
 	linber_init();
-	linber_register_service(service_uri, uri_len, &service_id, job_exec_time, max_concurrent_workers, &service_token);
+	linber_register_service(service_uri, uri_len, &service_id, job_exec_time, Max_Working, &service_token);
 	printf("registered service, id:%i, starting thread pool\n", service_id);
-	int workers_num = max_concurrent_workers;
+	int workers_num = Max_Working;
 	thread_info worker[workers_num];
 	for(int i=0; i<workers_num; i++){
 		worker[i].service_token = service_token;

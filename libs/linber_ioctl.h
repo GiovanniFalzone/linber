@@ -58,7 +58,7 @@ typedef struct linber_service_struct {
 	union op_params{
 		struct registration {
 			unsigned int exec_time;
-			unsigned int max_concurrent_workers;
+			unsigned int Max_Working;
 			int *ptr_service_id;
 			unsigned long *ptr_service_token;
 		} registration;
@@ -124,13 +124,13 @@ typedef struct service_status{
 	unsigned int requests_count;
 	unsigned int serving_time;
 	unsigned int serving_requests_count;
-	unsigned int max_concurrent_workers;
+	unsigned int Max_Working;
 } service_status;
 
 typedef struct system_status {
 	unsigned int requests_count;
 	unsigned int serving_requests_count;
-	unsigned int max_concurrent_workers;
+	unsigned int Max_Working;
 	unsigned int services_count;
 	service_status *services;
 }system_status;

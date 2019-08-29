@@ -60,7 +60,7 @@ int linber_register_service(char *service_uri, unsigned int uri_len, int *servic
 	param.service_uri = service_uri;
 	param.service_uri_len = uri_len;
 	param.op_params.registration.exec_time = exec_time;
-	param.op_params.registration.max_concurrent_workers = max_workers;
+	param.op_params.registration.Max_Working = max_workers;
 	param.op_params.registration.ptr_service_id = service_id;
 	param.op_params.registration.ptr_service_token = service_token;
 	ret = ioctl_send(IOCTL_REGISTER_SERVICE, &param);

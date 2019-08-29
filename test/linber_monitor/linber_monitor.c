@@ -32,7 +32,7 @@ int main(int argc,char* argv[]){
 		usleep(period);
 		linber_system_status(&system);
 		int num_services = system.services_count;
-		int num_concurent_workers = system.max_concurrent_workers;
+		int num_concurent_workers = system.Max_Working;
 		int num_requests = system.requests_count;
 		int serving_count = system.serving_requests_count;
 		int load = 0;
@@ -45,11 +45,11 @@ int main(int argc,char* argv[]){
 		for(int i = 0; i< num_services; i++){
 			service_status service = system.services[i];
 			load = 0;
-			if(service.serving_requests_count >0 && service.max_concurrent_workers >0){
+			if(service.serving_requests_count >0 && service.Max_Working >0){
 				load = ((serving_count*100) / num_concurent_workers);
 			}
 			printf("Service %s, ExecTime: %d, Max Concurrent Workers %d Requests:%d, Serving: %d, Serving time:%d, Load: %d\n", \
-					service.uri, service.exec_time, service.max_concurrent_workers, service.requests_count, service.serving_requests_count, service.serving_time, load);
+					service.uri, service.exec_time, service.Max_Working, service.requests_count, service.serving_requests_count, service.serving_time, load);
 		}
 	}
 	linber_exit();

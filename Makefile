@@ -1,5 +1,5 @@
 .PHONY:
-all: linber test
+all: linber tests
 
 .PHONY:
 linber:
