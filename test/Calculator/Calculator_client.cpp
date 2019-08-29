@@ -100,18 +100,19 @@ class calculator_client : public linberClient{
 
 	float pow(float a, float b){
 		char *request;
-		int response_len;
 		char *response;
+		int request_len;
+		int response_len;
 
 		request_msg.Clear();
 		request_msg.set_operand_a(a);
 		request_msg.set_operand_b(b);
 		request_msg.set_operation(Calculator::POW);
-		int request_len = request_msg.ByteSize();
-		request = (char*)malloc(request_len);
+		
+		request_len = request_msg.ByteSize();
+		linber_create_shm(&request, request_len);
 		request_msg.SerializeToArray(request, request_len);
-
-		linber_sendRequest(request, request_len, &response, &response_len, true);
+		linber_sendRequest_shm(&response, &response_len, true);
 
 		response_msg.ParseFromArray(response, response_len);
 		linber_end_operation();
