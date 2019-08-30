@@ -7,25 +7,39 @@
 #include <sys/time.h>
 #include <signal.h>
 
+#include <sys/types.h>
+
+#include "sched.h"
+
 #include "../../libs/linber_service_api.h"
 
 #define DEFAULT_SERVICE_URI	"org.service\0"
 #define DEFAULT_JOB_EXEC_TIME	1	//ms
 #define DEFAULT_MAX_CONCURRENT_WORKERS		4
 
+#define _GNU_SOURCE
+#include <linux/kernel.h>
+#include <unistd.h>
+#include <sys/syscall.h>
+#include <time.h>
+#include <linux/types.h>
+#include <sched.h>
+#include <linux/sched.h>
+#include <sys/types.h>
 
 char *service_uri;
 int uri_len;
 int service_id;
 unsigned long service_token;
 int abort_and_Exit = 0;
+int Max_Working = DEFAULT_MAX_CONCURRENT_WORKERS;
+int job_exec_time = DEFAULT_JOB_EXEC_TIME;
 
 typedef struct{
 	pthread_t tid;
 	unsigned long service_token;
 	unsigned int exec_time;
 } thread_info;
-
 
 void sig_handler(int signo){
   if (signo == SIGINT){
@@ -41,6 +55,7 @@ void *thread_job(void *args){
 	char *request, *response, *file_str;
 	boolean request_shm_mode;
 	thread_info worker = *(thread_info*)args;
+	struct timeval start, end;
 
 	if(linber_register_service_worker(service_uri, uri_len,worker.service_token, &worker_id, &file_str) == 0){
 		printf("started_thread id:%d, service:%s\n", worker_id, service_uri);
@@ -53,7 +68,6 @@ void *thread_job(void *args){
 				break;
 			}
 			if(ret != LINBER_SERVICE_SKIP_JOB){
-				struct timeval start, end;
 				gettimeofday(&start, NULL);
 				unsigned long passed_millis = 0;
 				do{
@@ -82,8 +96,6 @@ void *thread_job(void *args){
 }
 
 int main(int argc,char* argv[]){
-	int Max_Working = DEFAULT_MAX_CONCURRENT_WORKERS;
-	int job_exec_time = DEFAULT_JOB_EXEC_TIME;
 	if (signal(SIGINT, sig_handler) == SIG_ERR)
 		printf("can't catch SIGINT\n");
 

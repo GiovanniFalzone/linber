@@ -673,16 +673,15 @@ static int linber_register_service_worker(linber_service_struct *obj){
 		//------------------
 		// set as SCHED_DEADLINE with Service Period as period, Service Period as deadline and One request exec time as runtime
 		//------------------
-/*		attr.size = sizeof(struct sched_attr);
+		attr.size = sizeof(struct sched_attr);
 		attr.sched_policy = SCHED_DEADLINE;
-		attr.sched_runtime = ser_node->exec_time * 1000 * 1000;
-		attr.sched_period = 100 * 1000 * 1000;
+		attr.sched_runtime = (ser_node->exec_time + ((ser_node->exec_time*20)/100)) * 1000 * 1000;
+		attr.sched_period = 1000 * 1000 * 1000;
 		attr.sched_deadline = attr.sched_period;
 		res = sched_setattr(current, &attr);
 		if (res < 0){
 			printk(KERN_INFO "Linber:: Error %i setting SCHED_DEADLINE for worker %d of %s\n", res, worker_id, ser_node->uri);
 		}
-*/
 	} else {
 		return -1;
 	}

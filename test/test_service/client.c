@@ -71,7 +71,7 @@ void *thread_job(void *args){
 			printf("request aborted\n");
 		} else {
 			gettimeofday(&end, NULL);
-			passed_millis = (end.tv_sec - start.tv_sec) * 1000 + (end.tv_usec - start.tv_usec) / 1000;
+			passed_millis = (end.tv_sec - start.tv_sec)*1000 + (end.tv_usec - start.tv_usec)/1000;
 			printf("Request %d Response: %d %s served in %lu ms\n", worker.id, response_len, response, passed_millis);
 		}
 		linber_request_service_clean(request, FALSE, response, response_shm_mode);
