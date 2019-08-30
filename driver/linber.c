@@ -30,16 +30,22 @@ static struct device* dev_device = NULL; ///< The device-driver device struct po
 
 //------------------------------------------------------
 struct sched_attr {
-	uint32_t size; /* Size of this structure */
-	uint32_t sched_policy; /* Policy (SCHED_*) */
-	uint64_t sched_flags; /* Flags */
-	s32 sched_nice; /* Nice value (SCHED_OTHER,SCHED_BATCH) */
-	uint32_t sched_priority; /* Static priority (SCHED_FIFO,SCHED_RR) */
-	/* Remaining fields are for SCHED_DEADLINE */
-	uint64_t sched_runtime;
-	uint64_t sched_deadline;
-	uint64_t sched_period;
+    __u32 size;
+    __u32 sched_policy;
+    __u64 sched_flags;
+
+    /* SCHED_NORMAL, SCHED_BATCH */
+    __s32 sched_nice;
+
+    /* SCHED_FIFO, SCHED_RR */
+    __u32 sched_priority;
+
+    /* SCHED_DEADLINE */
+    __u64 sched_runtime;
+    __u64 sched_deadline;
+    __u64 sched_period;
 };
+
 
 typedef struct RequestNode{
 	struct list_head list;
@@ -94,11 +100,6 @@ typedef struct ServiceNode{
 		struct semaphore sem;
 	} Workers;
 
-	struct CBS{
-		int max_bandwidth;
-		struct semaphore sem_Q;
-	} CBS_server;
-
 	struct list_head RequestsHead;
 	struct list_head Completed_RequestsHead;
 	struct ServingRequests Serving_requests;
@@ -137,86 +138,22 @@ static ssize_t	dev_write(struct file *f, const char *buf, size_t sz, loff_t *off
 }
 
 
-//-----------------------------------------------
-static void CBS_init(ServiceNode *ser_node){
-	//-----------------------------------------
-	ser_node->CBS_server.max_bandwidth = 4;
-	sema_init(&ser_node->CBS_server.sem_Q, ser_node->CBS_server.max_bandwidth);
-	//-----------------------------------------
-}
-
-static inline void CBS_refill(ServiceNode *ser_node){
-	int i=0;
-	mutex_lock(&ser_node->service_mutex);
-	#ifdef DEBUG
-	printk(KERN_INFO "Linber:: ------------Refill for %s------------------\n", ser_node->uri);
-	#endif
-	while(	(ser_node->CBS_server.sem_Q.count < ser_node->CBS_server.max_bandwidth) && 	\
-			(i++ < ser_node->CBS_server.max_bandwidth)){
-		up(&ser_node->CBS_server.sem_Q);
-	}
-	mutex_unlock(&ser_node->service_mutex);
-}
-
-
-//-------------------------
-// check CBS Server bandwidth
-// if enough to execute reduce bandwith and proceed serving the request
-// else wait for refill
-//--------------------------
-static inline void CBS_job_check(ServiceNode *ser_node){
-	down(&ser_node->CBS_server.sem_Q);
-	current->static_prio = NICE_TO_PRIO(MIN_NICE + 1);
-	#ifdef DEBUG
-	printk(KERN_INFO "Linber:: Worker for %s working prio:%d\n", ser_node->uri, current->static_prio);
-	#endif
-}
-
-
-//-------------------------
-// if no budget then lower priority to avoid that a worker of a service
-// can steal execution time to the others, accuracy 10%
-//-------------------------
-void CBS_check_bandwidth(ServiceNode *ser_node){
-	int i;
-	struct task_struct *worker;
-	if(ser_node->CBS_server.sem_Q.count <= 0){
-		for(i=0; i<ser_node->Serving_requests.max_slots; i++){
-			worker = ser_node->Serving_requests.Serving_slots_arr[i].worker;
-			if(worker != NULL){				
-				worker->static_prio = NICE_TO_PRIO(MAX_NICE);	// min priority
-				#ifdef DEBUG
-				printk(KERN_INFO "Linber:: Bandwidth exausted, Worker for %s working prio:%d\n", ser_node->uri, current->static_prio);
-				#endif
-			}
-		}
-	}
-}
-
-//-------------------------
-// linber_thread is RT thread and every P millis refill the semaphore to max bandwidth
-// the task is running e.g at P/10 period and every time check the level of each service
-// if the bandwith is empty then reduce the priority of each worker for that service to MIN_PRIO
-// at P or every 10*(thread_period = P/10) a refill occour for each service and the workers receive a MAX_PRIO
-// so at most Q max bandiwth request can be served in P period
-//-------------------------
+//----------------------------------------------
 static int linber_manager_job(void* args){
 	unsigned long now=0, last=0, passed_millis;
 	struct timespec64 uptime;
 	ServiceNode *ser_node = NULL;
-	current->static_prio = NICE_TO_PRIO(MIN_NICE);	// max priority
 
 	while(!kthread_should_stop()){
 		ktime_get_boottime_ts64(&uptime);
 		now = timespec64_to_ns(&uptime);
 		passed_millis = (now - last) / 1000;
-		printk(KERN_INFO "Passed: %lu\n", passed_millis);
+//		printk(KERN_INFO "Passed: %lu\n", passed_millis);
 		last = now;
 
 		mutex_lock(&linber.mutex);
 		list_for_each_entry(ser_node, &linber.Services, list){
-			CBS_refill(ser_node);
-//				CBS_check_bandwidth(ser_node);
+			;
 		}
 		mutex_unlock(&linber.mutex);
 		msleep(100);
@@ -397,8 +334,6 @@ static ServiceNode * linber_create_service(linber_service_struct *obj){
 	ser_node->Serving_requests.num_active_slots = ser_node->Serving_requests.minimum_slots;
 	ser_node->Serving_requests.Serving_slots_arr = kmalloc(ser_node->Serving_requests.max_slots*sizeof(request_slot), GFP_KERNEL);
 
-	CBS_init(ser_node);
-
 	for(id=0; id<ser_node->Serving_requests.max_slots; id++){
 		mutex_init(&ser_node->Serving_requests.Serving_slots_arr[id].slot_mutex);
 		ser_node->Serving_requests.Serving_slots_arr[id].request = NULL;
@@ -558,7 +493,6 @@ static int get_and_load_request_to_slot(ServiceNode *ser_node, RequestNode **req
 	*req_node_ptr = req_node;
 	if(req_node != NULL){
 		slot->worker = current;
-		CBS_job_check(ser_node);
 
 		slot->request = req_node;
 		mutex_lock(&ser_node->Serving_requests.Serving_mutex);
@@ -727,7 +661,6 @@ static int linber_register_service_worker(linber_service_struct *obj){
 	ServiceNode *ser_node = findService(obj->service_uri);
 	int worker_id, res;
 	struct sched_attr attr;
-
 	if(ser_node != NULL){
 		if(!Service_check_Worker(ser_node, obj->op_params.register_worker.service_token, 0)){
 			return -1;
@@ -740,16 +673,16 @@ static int linber_register_service_worker(linber_service_struct *obj){
 		//------------------
 		// set as SCHED_DEADLINE with Service Period as period, Service Period as deadline and One request exec time as runtime
 		//------------------
-
-		attr.size = sizeof (struct sched_attr);
+/*		attr.size = sizeof(struct sched_attr);
 		attr.sched_policy = SCHED_DEADLINE;
-		attr.sched_runtime = ser_node->exec_time * 1000*1000;
-		attr.sched_period = 1000* 1000*1000;
-		attr.sched_deadline = 1000* 1000*1000;
+		attr.sched_runtime = ser_node->exec_time * 1000 * 1000;
+		attr.sched_period = 100 * 1000 * 1000;
+		attr.sched_deadline = attr.sched_period;
 		res = sched_setattr(current, &attr);
 		if (res < 0){
-			printk(KERN_INFO "Error setting SCHED_DEADLINE for worker %d of %s", worker_id, ser_node->uri);
+			printk(KERN_INFO "Linber:: Error %i setting SCHED_DEADLINE for worker %d of %s\n", res, worker_id, ser_node->uri);
 		}
+*/
 	} else {
 		return -1;
 	}
