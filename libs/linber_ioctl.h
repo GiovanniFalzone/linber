@@ -57,7 +57,7 @@ typedef struct linber_service_struct {
 	unsigned int service_uri_len;
 	union op_params{
 		struct registration {
-			unsigned int exec_time;
+			unsigned long exec_time_ns;
 			unsigned int Max_Working;
 			int *ptr_service_id;
 			unsigned long *ptr_service_token;
@@ -77,7 +77,7 @@ typedef struct linber_service_struct {
 			boolean request_shm_mode;
 			boolean *ptr_response_shm_mode;
 			int status;
-			unsigned int rel_deadline;
+			unsigned long abs_deadline_ns;
 			unsigned long *ptr_token;
 			int request_len;
 			int *ptr_response_len;
@@ -93,7 +93,6 @@ typedef struct linber_service_struct {
 			int service_id;
 			unsigned int worker_id;	// start job
 			unsigned long service_token;
-			unsigned int *ptr_slot_id;
 			int *ptr_request_len;
 			boolean *ptr_request_shm_mode;
 			union {
@@ -106,7 +105,6 @@ typedef struct linber_service_struct {
 			int service_id;
 			unsigned int worker_id;
 			unsigned long service_token;
-			unsigned int slot_id;
 			int response_len;
 			boolean response_shm_mode;
 			union {
@@ -120,16 +118,12 @@ typedef struct linber_service_struct {
 typedef struct service_status{
 	char * uri;
 	unsigned int uri_len;
-	unsigned int exec_time;
+	unsigned long exec_time_ms;
 	unsigned int requests_count;
-	unsigned int serving_time;
-	unsigned int serving_requests_count;
 	unsigned int Max_Working;
 } service_status;
 
 typedef struct system_status {
-	unsigned int requests_count;
-	unsigned int serving_requests_count;
 	unsigned int Max_Working;
 	unsigned int services_count;
 	service_status *services;

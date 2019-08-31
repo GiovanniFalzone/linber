@@ -38,7 +38,7 @@ void sig_handler(int signo){
 
 void *thread_job(void *args){
 	int ret, job_num = 1, request_len, response_len, response_shm_id;
-	unsigned int worker_id, slot_id;
+	unsigned int worker_id;
 	char *request, *response, *file_str;
 	key_t response_key;
 	boolean request_shm_mode;
@@ -50,7 +50,7 @@ void *thread_job(void *args){
 		while(1){
 			ret = linber_start_job_service(	service_uri, uri_len,				\
 											service_id, worker.service_token,	\
-											worker_id, &slot_id,				\
+											worker_id,				\
 											&request, &request_len, &request_shm_mode);
 
 			if(ret < 0){
@@ -82,7 +82,7 @@ void *thread_job(void *args){
 
 			ret = linber_end_job_service_shm(	service_uri, uri_len,				\
 												service_id, worker.service_token,	\
-												worker_id, slot_id,					\
+												worker_id,					\
 												request, request_shm_mode,			\
 												response, response_len, response_key);
 		}

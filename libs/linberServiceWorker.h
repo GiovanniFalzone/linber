@@ -15,7 +15,6 @@ class linberServiceWorker {
 	unsigned long service_token;
 	unsigned int exec_time;
 	unsigned int worker_id;
-	unsigned int slot_id;
 	unsigned int job_num;
 	std::thread thread_worker;
 	bool worker_alive;
@@ -41,15 +40,14 @@ public:
 		this->request = NULL;
 		this->response = NULL;
 
-		if(linber_register_service_worker(service_uri, uri_len, service_token, &worker_id, &file_str) == 0){
-			printf("Started Worker id:%d, service:%s token:%lu\n", worker_id, service_uri, service_token);
-		}
+		linber_init();
 		this->worker_alive = true;
 		thread_worker = std::thread(&linberServiceWorker::worker_job, this);
 	}
 
 	virtual ~linberServiceWorker(){
 		free(service_uri);
+		service_uri = NULL;
 	}
 
 	void join_worker(){
@@ -64,28 +62,36 @@ public:
 
 	void worker_job(){
 		int ret;
-		linber_init();
+		if(linber_register_service_worker(service_uri, uri_len, service_token, &worker_id, &file_str) < 0){
+			worker_alive = false;
+		} else {
+			printf("Started Worker id:%d, service:%s token:%lu\n", worker_id, service_uri, service_token);
+		}
 		while(worker_alive){
+			request_shm_mode = false;
 			ret = linber_start_job_service(	service_uri, uri_len,				\
 											service_id, service_token,			\
-											worker_id, &slot_id,				\
+											worker_id,				\
 											&request, &request_len, &request_shm_mode);
 
 			if(ret < 0){
-				printf("Job aborted ret %i\n", ret);
-				return;
+				break;
 			}
 			if(ret != LINBER_SERVICE_SKIP_JOB){
-				printf("Worker id:%d job#:%d, serving request\n", worker_id, job_num++);
-				execute_job();
-			}
+				#ifdef DEBUG
+					printf("Worker id:%d job#:%d, serving request\n", worker_id, job_num++);
+				#endif
 
-			ret = linber_end_job_service(	service_uri, uri_len,				\
-											service_id, service_token,			\
-											worker_id, slot_id,					\
-											request, request_shm_mode,			\
-											response, response_len);
+				execute_job();
+
+				ret = linber_end_job_service(	service_uri, uri_len,				\
+												service_id, service_token,			\
+												worker_id,							\
+												request, request_shm_mode,			\
+												response, response_len);
+			}
 		}
+		printf("Worker %d died\n", worker_id);
 	}
 
 	virtual void execute_job(){

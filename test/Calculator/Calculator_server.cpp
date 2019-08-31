@@ -76,7 +76,6 @@ class calculator_service : public linberServiceWorker{
 		float b;
 		float result;
 
-		cout << "executing job" << endl;
 		request_msg.ParseFromArray(request, request_len);
 		op = request_msg.operation();
 		a = request_msg.operand_a();
@@ -85,7 +84,6 @@ class calculator_service : public linberServiceWorker{
 		result = compute(op, a, b);
 		response_msg.set_result(result);
 		response_len = response_msg.ByteSize();
-		cout << op <<"("<< a <<","<< b <<")"<< "==" << result << "len:" << response_len << endl;
 
 		response = (char*)malloc(response_len);
 		response_msg.SerializeToArray(response, response_len);

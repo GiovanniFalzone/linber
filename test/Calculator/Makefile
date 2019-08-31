@@ -2,7 +2,7 @@ CC = g++
 CCFLAGS = -std=c++11 -Wall -Wextra -pedantic -I.
 LDLIBS = -lprotobuf -pthread
 
-TARGET = Calculator_server Calculator_client
+TARGET = Calculator.pb Calculator_server Calculator_client
 
 SRCS = ../../libs/linber_service_api.c
 SRCS += Calculator.pb.cc
@@ -17,9 +17,11 @@ PROTO = Calculator.proto
 .PHONY:
 all: $(TARGET)
 
-%: %.cpp $(DEPS) $(PROTO)
-	protoc $(PROTO) --cpp_out=.
+%: %.cpp $(DEPS) $(PROTO) 
 	$(CC) -o $@ $< $(SRCS) $(CCFLAGS) $(LDLIBS) 
+
+Calculator.pb:
+	protoc $(PROTO) --cpp_out=.
 
 
 .PHONY:

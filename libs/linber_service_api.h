@@ -61,19 +61,19 @@ void linber_request_service_clean(char *request, boolean shm_request_mode, char 
 
 int linber_start_job_service(	char *service_uri, unsigned int uri_len,		\
 								int service_id, unsigned long service_token,	\
-								unsigned int worker_id, unsigned int *slot_id,	\
+								unsigned int worker_id,							\
 								char **request, int *request_len, 				\
 								boolean *request_shm_mode);
 
 int linber_end_job_service(	char *service_uri, unsigned int uri_len,			\
 							int service_id, unsigned long service_token,		\
-							unsigned int worker_id, unsigned int slot_id,		\
+							unsigned int worker_id,								\
 							char *request, boolean request_shm_mode,			\
 							char *response, int response_len);
 
 int linber_end_job_service_shm(	char *service_uri, unsigned int uri_len,		\
 								int service_id, unsigned long service_token,	\
-								unsigned int worker_id, unsigned int slot_id,	\
+								unsigned int worker_id,							\
 								char *request, boolean request_shm,				\
 								char *response, int response_len, key_t response_key);
 
