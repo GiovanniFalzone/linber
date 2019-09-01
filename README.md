@@ -43,7 +43,7 @@ The following data have been computed on a:\
 ## Linber API
 <img src="img/Linber_component_view.png" width="768">
 <img src="img/Linber_stack.png" width="256">
-<img src="img/Linber_sequence.png" width="256">
+<img src="img/Linber_sequence.png" width="768">
 
 ### Create Service
 
