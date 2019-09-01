@@ -17,15 +17,8 @@
 #define DEFAULT_JOB_EXEC_TIME	1	//ms
 #define DEFAULT_MAX_CONCURRENT_WORKERS		4
 
-#define _GNU_SOURCE
-#include <linux/kernel.h>
-#include <unistd.h>
-#include <sys/syscall.h>
-#include <time.h>
-#include <linux/types.h>
-#include <sched.h>
-#include <linux/sched.h>
-#include <sys/types.h>
+#define DEBUG_MESSAGE
+
 
 char *service_uri;
 int uri_len;
@@ -78,7 +71,7 @@ void *thread_job(void *args){
 
 			response_len = request_len;
 			response = malloc(response_len);
-			#ifdef DEBUG
+			#ifdef DEBUG_MESSAGE
 				printf("thread id:%d job#:%d, serving request, %s %d\n", worker_id, job_num++, request, request_len);
 				memcpy(response, request, response_len);
 			#endif

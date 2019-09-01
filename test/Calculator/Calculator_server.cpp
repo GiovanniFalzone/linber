@@ -115,7 +115,7 @@ int main(){
 	}
 
 	linber_init();
-	linber_register_service(str_uri, uri_len, &service_id, 100, num_workers, &service_token);
+	linber_register_service(str_uri, uri_len, &service_id, 1, num_workers, &service_token);
 
 	calculator_workers = (calculator_service**)malloc(sizeof(calculator_service*)*num_workers);
 	for(int i=0; i<num_workers; i++){

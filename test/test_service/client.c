@@ -10,7 +10,7 @@
 
 
 #define DEFAULT_SERVICE_URI	"org.service\0"
-#define REL_DEADLINE		10
+#define DEFAULT_REL_DEADLINE		0	// 0 for best effor
 #define DEFAULT_CONCURRENT_REQUESTS	10
 #define DEFAULT_MAX_INTER_PERIOD	1
 
@@ -20,6 +20,7 @@ typedef struct{
 	char *service_uri;
 	int uri_len;
 	int blocking;
+	unsigned int rel_deadline;
 } thread_info;
 
 int abort_request = 0;
@@ -51,13 +52,13 @@ void *thread_job(void *args){
 		if(worker.blocking == 1){
 			printf("sending Blocking request id:%d, service:%s\n", worker.id, worker.service_uri);
 			ret = linber_request_service(	worker.service_uri, worker.uri_len,	\
-											REL_DEADLINE, request, request_len,	\
+											worker.rel_deadline, request, request_len,	\
 											&response, &response_len, &response_shm_mode);
 
 		} else {
 			printf("sending NON Blocking request id:%d, service:%s\n", worker.id, worker.service_uri);
 			ret = linber_request_service_no_blocking(	worker.service_uri, worker.uri_len,	\
-														REL_DEADLINE, request, request_len,	\
+														worker.rel_deadline, request, request_len,	\
 														&token);
 			if(ret >= 0){
 				sleep(1);
@@ -85,21 +86,29 @@ int main(int argc,char* argv[]){
 	int uri_len = strlen(service_uri);
 	int concurrent_requests = DEFAULT_CONCURRENT_REQUESTS;
 	int max_inter_request = DEFAULT_MAX_INTER_PERIOD;
+	int rel_deadline = DEFAULT_REL_DEADLINE;
+	int n;
 	if(argc >= 2){
 		service_uri = malloc(strlen(argv[1])+1);
 		strcpy(service_uri, argv[1]);
 		uri_len = strlen(service_uri);
 	}
 	if(argc >= 3){
-		int n = atoi(argv[2]);
+		n = atoi(argv[2]);
 		if(n > 0){
 			concurrent_requests = n;
 		}
 	}
 	if(argc >= 4){
-		int n = atoi(argv[3]);
+		n = atoi(argv[3]);
 		if(n > 0){
 			max_inter_request = n;
+		}
+	}
+	if(argc >= 5){
+		n = atoi(argv[4]);
+		if(n > 0){
+			rel_deadline = n;
 		}
 	}
 
@@ -117,7 +126,10 @@ int main(int argc,char* argv[]){
 			worker[i].blocking = 1;
 		}
 		worker[i].blocking = 1;
-		usleep(1000*(rand()%max_inter_request + 1));
+		worker[i].rel_deadline = rel_deadline;
+		if(max_inter_request > 0){
+			usleep(1000*(rand()%max_inter_request));
+		}
 		int terr = pthread_create(&worker[i].tid, NULL, thread_job, (void*)&worker[i]);
 		if (terr != 0){
 			printf("Thread creation error: %d\n", terr);

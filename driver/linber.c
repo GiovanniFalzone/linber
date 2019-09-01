@@ -129,11 +129,6 @@ static ssize_t	dev_write(struct file *f, const char *buf, size_t sz, loff_t *off
 
 
 // ------------------------------------------------------
-static inline int initialize_queue(struct list_head *head){
-	INIT_LIST_HEAD(head);
-	return 0;
-}
-
 static inline RequestNode* create_Request(void){
 	RequestNode *req_node;
 	req_node = kmalloc(sizeof(*req_node) ,GFP_KERNEL);
@@ -265,8 +260,8 @@ static ServiceNode * linber_create_service(linber_service_struct *obj){
 	int id = 0;
 	ServiceNode *ser_node = NULL;
 	ser_node = kmalloc(sizeof(*ser_node) ,GFP_KERNEL);
-	initialize_queue(&ser_node->Completed_RequestsHead);
-	initialize_queue(&ser_node->RequestsHead);
+	INIT_LIST_HEAD(&ser_node->Completed_RequestsHead);
+	INIT_LIST_HEAD(&ser_node->RequestsHead);
 	get_random_bytes(&ser_node->token, sizeof(ser_node->token));
 	ser_node->uri = obj->service_uri;
 	ser_node->exec_time_ns = obj->op_params.registration.exec_time_ns;
@@ -380,7 +375,7 @@ static worker_struct* get_worker_by_id(ServiceNode *ser_node, unsigned int worke
 	if((worker_id >= 0) && (worker_id < ser_node->Workers.Max_Workers)){
 		worker = &(ser_node->Workers.worker_slots[worker_id]);
 		if((worker->worker->pid != current->pid)){
-			worker = NULL;
+//			worker = NULL;
 		}
 	}
 	if(worker == NULL){
@@ -451,7 +446,6 @@ static RequestNode* worker_get_request(ServiceNode *ser_node,unsigned int worker
 //------------------------------------------------------
 static int linber_register_service(linber_service_struct *obj){
 	ServiceNode *ser_node;
-	printk(KERN_INFO "linber:: IOCTL Registration received\n");
 	ser_node = findService(obj->service_uri);
 	if(ser_node == NULL){
 		ser_node = linber_create_service(obj);
@@ -564,35 +558,43 @@ static int linber_request_service_get_response(linber_service_struct *obj){
 }
 
 
-static void set_current_best_effort(void){
+static void Dispatch_as_BestEffort(void){
 	int res;
 	struct sched_attr attr;
-	printk(KERN_INFO "Linber:: Dispatched as Normal\n");
 	attr.size = sizeof(struct sched_attr);
+	attr.sched_flags = SCHED_FLAG_RESET_ON_FORK;
 	attr.sched_policy = SCHED_NORMAL;
-	attr.sched_nice = 0;
+	attr.sched_nice = -19;
+	attr.sched_runtime = 0;
+	attr.sched_period = attr.sched_deadline = 0;
 	res = sched_setattr(current, &attr);
 	if (res < 0){
-		printk(KERN_INFO "Linber:: Error %i setting SCHED_NORMAL\n", res);
+		printk(KERN_INFO "Linber:: Error %i setting Best Effort scheduling\n", res);
+	} else {
+		printk(KERN_INFO "Linber:: Dispatched as Normal\n");
 	}
 }
 
 //------------------
 // set as SCHED_DEADLINE with Service Period as period, Service Period as deadline and One request exec time as runtime
 //------------------
-static void set_current_sched_deadline(unsigned long exec_time_ns, unsigned long period_ns, unsigned long rel_deadline_ns){
+static int Dispatch_as_RealTime(unsigned long exec_time_ns, unsigned long period_ns, unsigned long rel_deadline_ns){
 	int res;
 	struct sched_attr attr;
-	printk(KERN_INFO "Linber:: Dispatched as RealTime Q:%lu P:%lu D:%lu\n", exec_time_ns, period_ns, rel_deadline_ns);
 	attr.size = sizeof(struct sched_attr);
+	attr.sched_flags = SCHED_FLAG_RECLAIM | SCHED_FLAG_RESET_ON_FORK;
 	attr.sched_policy = SCHED_DEADLINE;
-	attr.sched_runtime = (exec_time_ns + ((exec_time_ns*20)/100));
+	attr.sched_nice = 0;
+	attr.sched_runtime = exec_time_ns;
 	attr.sched_period = period_ns;
 	attr.sched_deadline = rel_deadline_ns;
 	res = sched_setattr(current, &attr);
 	if (res < 0){
-		printk(KERN_INFO "Linber:: Error %i setting SCHED_DEADLINE\n", res);
+		printk(KERN_INFO "Linber:: SCHED_DEADLINE FAULT %i with Q:%lu P:%lu D:%lu\n", res, exec_time_ns/1000000, period_ns/1000000, rel_deadline_ns/1000000);
+	} else {
+		printk(KERN_INFO "Linber:: Dispatched as RealTime Q:%lu P:%lu D:%lu\n", exec_time_ns/1000000, period_ns/1000000, rel_deadline_ns/1000000);
 	}
+	return res;
 }
 
 
@@ -611,20 +613,19 @@ static int linber_register_service_worker(linber_service_struct *obj){
 			mutex_unlock(&ser_node->service_mutex);
 			ser_node->Workers.worker_slots[worker_id].worker = current;
 			CHECK_MEMORY_ERROR(put_user(worker_id, obj->op_params.register_worker.ptr_worker_id));
+			Dispatch_as_RealTime(10000000, 1000000000, 1000000000);
 		}
 	} else {
 		return -1;
 	}
-
-//	set_current_sched_deadline(1*1000*1000, 1000*1000*1000, 1000*1000*1000);
-
 	return 0;
 }
 
 static int linber_Start_Job(linber_service_struct *obj){
 	RequestNode *req_node = NULL;
 	ServiceNode *ser_node = findService_by_id(obj->op_params.start_job.service_id);
-	unsigned int worker_id, rel_deadline_ns;
+	int rel_deadline_ns;
+	unsigned int worker_id;
 	unsigned long service_token;
 	ktime_t now;
 
@@ -642,11 +643,18 @@ static int linber_Start_Job(linber_service_struct *obj){
 			return LINBER_SERVICE_SKIP_JOB;
 		} else {
 			if(req_node->abs_deadline_ns == -1){	// unsigned long -1 is the maximum value 2^64 -1
-				set_current_best_effort();
+				Dispatch_as_BestEffort();
 			} else {
-				now = ktime_get_real();
-				rel_deadline_ns = (req_node->abs_deadline_ns); // abs_deadline - now
-//				set_current_sched_deadline(ser_node->exec_time_ns, 1000*1000*1000, 1000*1000*1000);
+				now = ktime_get();		// CLOCK_MONOTONIC, since boot without considering suspend
+				rel_deadline_ns = (req_node->abs_deadline_ns - ktime_to_ns(now)); // abs_deadline - now
+				if(rel_deadline_ns <= 0){
+					printk(KERN_INFO "Linber:: request expired rel: %i abs:%lu\n", rel_deadline_ns, req_node->abs_deadline_ns);
+					Dispatch_as_BestEffort();
+				} else {
+					if(Dispatch_as_RealTime(ser_node->exec_time_ns, 10000000000, rel_deadline_ns) < 0){
+//						Dispatch_as_BestEffort();
+					}
+				}
 			}
 			CHECK_MEMORY_ERROR(put_user(req_node->request_len, obj->op_params.start_job.ptr_request_len));
 			CHECK_MEMORY_ERROR(put_user(req_node->request_shm_mode, obj->op_params.start_job.ptr_request_shm_mode));
@@ -657,8 +665,6 @@ static int linber_Start_Job(linber_service_struct *obj){
 	} else {
 		return LINBER_SERVICE_NOT_EXISTS;
 	}
-
-	set_current_sched_deadline(1*1000*1000, 1000*1000*1000, 1000*1000*1000);
 	return 0;
 }
 
@@ -888,7 +894,7 @@ int init_module(void) {
 		return PTR_ERR(dev_device);
 	}
 
-	initialize_queue(&linber.Services);
+	INIT_LIST_HEAD(&linber.Services);
 	idr_init(&linber.Services_idr);
 	linber.Request_count = 0;
 	linber.Max_Working = 0;

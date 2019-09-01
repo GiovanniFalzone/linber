@@ -1,4 +1,5 @@
 #include <sys/time.h>
+#include <time.h>
 #include "linber_service_api.h"
 
 int linber_fd = -1;
@@ -219,17 +220,24 @@ int linber_request_service(char *service_uri, unsigned int uri_len, unsigned int
 	unsigned long token;
 	linber_service_struct param;
 	key_t response_key;
-	struct timeval now;
-	gettimeofday(&now, NULL);
+	struct timespec now;
+
+	// we consider the boot time and 64bit are enough to express the abs deadline in ns
+	if(clock_gettime(CLOCK_MONOTONIC, &now) == -1){
+		perror("clock gettime error");
+		rel_deadline_ms = 0;
+	}
 
 	param.op_params.request.blocking = TRUE;;
 	param.service_uri = service_uri;
 	param.service_uri_len = uri_len;
 
 	if(rel_deadline_ms == 0){
-		param.op_params.request.abs_deadline_ns = -1; // 2^64 - 1
+		param.op_params.request.abs_deadline_ns = -1; // -1 for an unsigned is converted to the maximum value
 	} else {
-		param.op_params.request.abs_deadline_ns = (now.tv_usec + rel_deadline_ms*1000)*1000;
+		param.op_params.request.abs_deadline_ns = now.tv_sec*1000*1000*1000;
+		param.op_params.request.abs_deadline_ns += now.tv_nsec;
+		param.op_params.request.abs_deadline_ns += rel_deadline_ms * 1000*1000;
 	}
 
 	param.op_params.request.ptr_token = &token;
@@ -282,18 +290,23 @@ int linber_request_service_shm(char *service_uri, unsigned int uri_len, unsigned
 	unsigned long token;
 	linber_service_struct param;
 	key_t response_key;
-	struct timeval now;
-	gettimeofday(&now, NULL);
+	struct timespec now;
+
+	if(clock_gettime(CLOCK_MONOTONIC, &now) == -1){
+		perror("clock gettime error");
+		rel_deadline_ms = 0;
+	}
 
 	param.op_params.request.blocking = TRUE;;
 	param.service_uri = service_uri;
 	param.service_uri_len = uri_len;
 
 	if(rel_deadline_ms == 0){
-		param.op_params.request.abs_deadline_ns = -1; // 2^64 - 1
+		param.op_params.request.abs_deadline_ns = -1; // -1 for an unsigned is converted to the maximum value
 	} else {
-		param.op_params.request.abs_deadline_ns = now.tv_usec + rel_deadline_ms*1000;
+		param.op_params.request.abs_deadline_ns = (now.tv_nsec + rel_deadline_ms*1000000);
 	}
+	printf("Assigned Abs_deadline %lu\n", param.op_params.request.abs_deadline_ns);
 
 	param.op_params.request.ptr_token = &token;
 	param.op_params.request.status = LINBER_REQUEST_INIT;
@@ -342,18 +355,23 @@ int linber_request_service_no_blocking(char *service_uri, unsigned int uri_len, 
 										unsigned long *ptr_token){
 	int ret = 0;
 	linber_service_struct param;
-	struct timeval now;
-	gettimeofday(&now, NULL);
+	struct timespec now;
+
+	if(clock_gettime(CLOCK_MONOTONIC, &now) == -1){
+		perror("clock gettime error");
+		rel_deadline_ms = 0;
+	}
 
 	param.op_params.request.blocking = FALSE;
 	param.service_uri = service_uri;
 	param.service_uri_len = uri_len;
 
 	if(rel_deadline_ms == 0){
-		param.op_params.request.abs_deadline_ns = -1; // 2^64 - 1
+		param.op_params.request.abs_deadline_ns = -1; // -1 for an unsigned is converted to the maximum value
 	} else {
-		param.op_params.request.abs_deadline_ns = now.tv_usec + rel_deadline_ms*1000;
+		param.op_params.request.abs_deadline_ns = (now.tv_nsec + rel_deadline_ms*1000000);
 	}
+	printf("Assigned Abs_deadline %lu\n", param.op_params.request.abs_deadline_ns);
 
 	param.op_params.request.ptr_token = ptr_token;
 	param.op_params.request.status = LINBER_REQUEST_INIT;
@@ -375,18 +393,25 @@ int linber_request_service_no_blocking_shm(char *service_uri, unsigned int uri_l
 										unsigned long *ptr_token){
 	int ret = 0;
 	linber_service_struct param;
-	struct timeval now;
-	gettimeofday(&now, NULL);
+	struct timespec now;
+
+	// we consider the boot time and 64bit are enough to express the abs deadline in ns
+	if(clock_gettime(CLOCK_MONOTONIC, &now) == -1){
+		perror("clock gettime error");
+		rel_deadline_ms = 0;
+	}
 
 	param.op_params.request.blocking = FALSE;
 	param.service_uri = service_uri;
 	param.service_uri_len = uri_len;
 
 	if(rel_deadline_ms == 0){
-		param.op_params.request.abs_deadline_ns = -1; // 2^64 - 1
+		param.op_params.request.abs_deadline_ns = -1; // -1 for an unsigned is converted to the maximum value
 	} else {
-		param.op_params.request.abs_deadline_ns = now.tv_usec + rel_deadline_ms*1000;
+		param.op_params.request.abs_deadline_ns = now.tv_sec*1000*1000*1000;
+		param.op_params.request.abs_deadline_ns += rel_deadline_ms * 1000*1000;
 	}
+	printf("Assigned Abs_deadline %lu\n", param.op_params.request.abs_deadline_ns);
 
 	param.op_params.request.ptr_token = ptr_token;
 	param.op_params.request.status = LINBER_REQUEST_INIT;

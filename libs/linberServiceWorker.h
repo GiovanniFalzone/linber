@@ -42,6 +42,13 @@ public:
 
 		linber_init();
 		this->worker_alive = true;
+
+		if(linber_register_service_worker(service_uri, uri_len, service_token, &worker_id, &file_str) < 0){
+			worker_alive = false;
+		} else {
+			printf("Started Worker id:%d, service:%s token:%lu\n", worker_id, service_uri, service_token);
+		}
+
 		thread_worker = std::thread(&linberServiceWorker::worker_job, this);
 	}
 
@@ -62,11 +69,6 @@ public:
 
 	void worker_job(){
 		int ret;
-		if(linber_register_service_worker(service_uri, uri_len, service_token, &worker_id, &file_str) < 0){
-			worker_alive = false;
-		} else {
-			printf("Started Worker id:%d, service:%s token:%lu\n", worker_id, service_uri, service_token);
-		}
 		while(worker_alive){
 			request_shm_mode = false;
 			ret = linber_start_job_service(	service_uri, uri_len,				\

@@ -5,7 +5,7 @@ all: linber tests
 
 .PHONY:
 linber:
-	cd driver && make all
+	cd driver && make clean && make all
 
 .PHONY:
 tests:
