@@ -265,6 +265,7 @@ static ServiceNode * linber_create_service(linber_service_struct *obj){
 	get_random_bytes(&ser_node->token, sizeof(ser_node->token));
 	ser_node->uri = obj->service_uri;
 	ser_node->exec_time_ns = obj->op_params.registration.exec_time_ns;
+	ser_node->exec_time_ns += (ser_node->exec_time_ns*20)/100;
 	ser_node->Request_count = 0;
 	ser_node->destroy_me = false;
 	mutex_init(&ser_node->service_mutex);
@@ -563,15 +564,16 @@ static void Dispatch_as_BestEffort(void){
 	struct sched_attr attr;
 	attr.size = sizeof(struct sched_attr);
 	attr.sched_flags = SCHED_FLAG_RESET_ON_FORK;
-	attr.sched_policy = SCHED_NORMAL;
-	attr.sched_nice = -19;
+	attr.sched_policy = SCHED_FIFO;
+	attr.sched_nice = 0;
+	attr.sched_priority = 99;
 	attr.sched_runtime = 0;
 	attr.sched_period = attr.sched_deadline = 0;
 	res = sched_setattr(current, &attr);
 	if (res < 0){
 		printk(KERN_INFO "Linber:: Error %i setting Best Effort scheduling\n", res);
 	} else {
-		printk(KERN_INFO "Linber:: Dispatched as Normal\n");
+		printk(KERN_INFO "Linber:: Dispatched as Best Effort\n");
 	}
 }
 
@@ -582,9 +584,8 @@ static int Dispatch_as_RealTime(unsigned long exec_time_ns, unsigned long period
 	int res;
 	struct sched_attr attr;
 	attr.size = sizeof(struct sched_attr);
-	attr.sched_flags = SCHED_FLAG_RECLAIM | SCHED_FLAG_RESET_ON_FORK;
+	attr.sched_flags = 0;//SCHED_FLAG_RECLAIM | SCHED_FLAG_RESET_ON_FORK;
 	attr.sched_policy = SCHED_DEADLINE;
-	attr.sched_nice = 0;
 	attr.sched_runtime = exec_time_ns;
 	attr.sched_period = period_ns;
 	attr.sched_deadline = rel_deadline_ns;
@@ -600,7 +601,7 @@ static int Dispatch_as_RealTime(unsigned long exec_time_ns, unsigned long period
 
 static int linber_register_service_worker(linber_service_struct *obj){
 	ServiceNode *ser_node = findService(obj->service_uri);
-	int worker_id;
+	int worker_id, service_period;
 
 	if(ser_node != NULL){
 		if(!Service_check_Worker(ser_node, obj->op_params.register_worker.service_token, 0)){
@@ -613,7 +614,12 @@ static int linber_register_service_worker(linber_service_struct *obj){
 			mutex_unlock(&ser_node->service_mutex);
 			ser_node->Workers.worker_slots[worker_id].worker = current;
 			CHECK_MEMORY_ERROR(put_user(worker_id, obj->op_params.register_worker.ptr_worker_id));
-			Dispatch_as_RealTime(10000000, 1000000000, 1000000000);
+//-----------------------------------------------------
+// I don't know why but this is required
+			service_period = 1000000000;
+			service_period = service_period/2;
+			Dispatch_as_RealTime(ser_node->exec_time_ns, service_period, service_period);
+//-----------------------------------------------------
 		}
 	} else {
 		return -1;
@@ -624,7 +630,7 @@ static int linber_register_service_worker(linber_service_struct *obj){
 static int linber_Start_Job(linber_service_struct *obj){
 	RequestNode *req_node = NULL;
 	ServiceNode *ser_node = findService_by_id(obj->op_params.start_job.service_id);
-	int rel_deadline_ns;
+	int rel_deadline_ns, service_period;
 	unsigned int worker_id;
 	unsigned long service_token;
 	ktime_t now;
@@ -651,8 +657,10 @@ static int linber_Start_Job(linber_service_struct *obj){
 					printk(KERN_INFO "Linber:: request expired rel: %i abs:%lu\n", rel_deadline_ns, req_node->abs_deadline_ns);
 					Dispatch_as_BestEffort();
 				} else {
-					if(Dispatch_as_RealTime(ser_node->exec_time_ns, 10000000000, rel_deadline_ns) < 0){
-//						Dispatch_as_BestEffort();
+					service_period = 1000000000;
+					rel_deadline_ns = (rel_deadline_ns > service_period)?service_period:rel_deadline_ns;
+					if(Dispatch_as_RealTime(ser_node->exec_time_ns, service_period, rel_deadline_ns) < 0){
+						Dispatch_as_BestEffort();
 					}
 				}
 			}
