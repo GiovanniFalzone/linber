@@ -376,7 +376,7 @@ static worker_struct* get_worker_by_id(ServiceNode *ser_node, unsigned int worke
 	if((worker_id >= 0) && (worker_id < ser_node->Workers.Max_Workers)){
 		worker = &(ser_node->Workers.worker_slots[worker_id]);
 		if((worker->worker->pid != current->pid)){
-//			worker = NULL;
+			worker = NULL;
 		}
 	}
 	if(worker == NULL){
