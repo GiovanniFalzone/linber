@@ -22,6 +22,7 @@
 #define CLA_NAME "linberclass"
 
 #define CHECK_MEMORY_ERROR(value) if(value!=0){return LINBER_USER_MEMORY_ERROR;}
+//#define DEBUG_MODULE
 
 
 static int dev_major;
@@ -573,7 +574,9 @@ static void Dispatch_as_BestEffort(void){
 	if (res < 0){
 		printk(KERN_INFO "Linber:: Error %i setting Best Effort scheduling\n", res);
 	} else {
-		printk(KERN_INFO "Linber:: Dispatched as Best Effort\n");
+		#ifdef DEBUG_MODULE
+			printk(KERN_INFO "Linber:: Dispatched as Best Effort\n");
+		#endif
 	}
 }
 
@@ -593,7 +596,9 @@ static int Dispatch_as_RealTime(unsigned long exec_time_ns, unsigned long period
 	if (res < 0){
 		printk(KERN_INFO "Linber:: SCHED_DEADLINE FAULT %i with Q:%lu P:%lu D:%lu\n", res, exec_time_ns/1000000, period_ns/1000000, rel_deadline_ns/1000000);
 	} else {
-		printk(KERN_INFO "Linber:: Dispatched as RealTime Q:%lu P:%lu D:%lu\n", exec_time_ns/1000000, period_ns/1000000, rel_deadline_ns/1000000);
+		#ifdef DEBUG_MODULE
+			printk(KERN_INFO "Linber:: Dispatched as RealTime Q:%lu P:%lu D:%lu\n", exec_time_ns/1000000, period_ns/1000000, rel_deadline_ns/1000000);
+		#endif
 	}
 	return res;
 }

@@ -14,11 +14,8 @@
 #include "../../libs/linber_service_api.h"
 
 #define DEFAULT_SERVICE_URI	"org.service\0"
-#define DEFAULT_JOB_EXEC_TIME	1	//ms
+#define DEFAULT_JOB_EXEC_TIME				5	//ms
 #define DEFAULT_MAX_CONCURRENT_WORKERS		4
-
-#define DEBUG_MESSAGE
-
 
 char *service_uri;
 int uri_len;
@@ -70,11 +67,7 @@ void *thread_job(void *args){
 			}
 
 			response_len = request_len;
-			response = malloc(response_len);
-			#ifdef DEBUG_MESSAGE
-				printf("thread id:%d job#:%d, serving request, %s %d\n", worker_id, job_num++, request, request_len);
-				memcpy(response, request, response_len);
-			#endif
+			response = malloc(response_len);	// response will be free by linber_request_service_clean
 
 			ret = linber_end_job_service(	service_uri, uri_len,				\
 											service_id, worker.service_token,	\
@@ -92,7 +85,7 @@ int main(int argc,char* argv[]){
 	if (signal(SIGINT, sig_handler) == SIG_ERR)
 		printf("can't catch SIGINT\n");
 
-	if(argc >= 2){
+	if(argc >= 2){		// SERVICE URI
 		service_uri = malloc(strlen(argv[1])+1);
 		strcpy(service_uri, argv[1]);
 	} else {
@@ -100,14 +93,14 @@ int main(int argc,char* argv[]){
 		strcpy(service_uri, DEFAULT_SERVICE_URI);
 	}
 
-	if(argc >= 3){
+	if(argc >= 3){		// Number of Workers
 		int n = atoi(argv[2]);
 		if(n > 0){
 			Max_Working = n;
 		}
 	}
 
-	if(argc >= 4){
+	if(argc >= 4){		// Execution time
 		int n = atoi(argv[3]);
 		if(n >= 0){
 			job_exec_time = n;

@@ -2,7 +2,7 @@ CC = gcc
 CFLAGS = -Wall -Wextra -pedantic
 LDLIBS = -pthread
 
-TARGET = server client client_efficiency_test
+TARGET = server client_blocking client_no_blocking client_efficiency_test
 
 SRCS = ../../libs/linber_service_api.c
 

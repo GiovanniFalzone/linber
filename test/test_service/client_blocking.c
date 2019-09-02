@@ -10,20 +10,16 @@
 
 
 #define DEFAULT_SERVICE_URI	"org.service\0"
+#define DEFAULT_CONCURRENT_REQUESTS	16
+#define DEFAULT_MAX_INTER_PERIOD	0
 #define DEFAULT_REL_DEADLINE		0	// 0 for best effor
-#define DEFAULT_CONCURRENT_REQUESTS	10
-#define DEFAULT_MAX_INTER_PERIOD	1
-
-typedef struct{
-	pthread_t tid;
-	int id;
-	char *service_uri;
-	int uri_len;
-	int blocking;
-	unsigned int rel_deadline;
-} thread_info;
 
 int abort_request = 0;
+char *service_uri = DEFAULT_SERVICE_URI;
+int uri_len = sizeof(DEFAULT_SERVICE_URI);
+int concurrent_requests = DEFAULT_CONCURRENT_REQUESTS;
+int max_inter_request = DEFAULT_MAX_INTER_PERIOD;
+int max_rel_Deadline_ms = DEFAULT_REL_DEADLINE;
 
 void sig_handler(int signo){
   if (signo == SIGINT){
@@ -32,14 +28,19 @@ void sig_handler(int signo){
   }
 }
 
+typedef struct{
+	pthread_t tid;
+	int id;
+	int rel_deadline_ms;
+} thread_info;
+
 void *thread_job(void *args){
 	thread_info worker = *(thread_info*)args;
 	struct timeval start, end;
 	unsigned long passed_millis = 0;
 	int ret = 0;
-	unsigned long token;
 	int request_len = strlen("ciao\0") + 1;
-	char *request = malloc(request_len);
+	char *request = malloc(request_len);	// request will be free by linber_request_service_clean
 	char *response;
 	int response_len;
 	boolean response_shm_mode;
@@ -49,25 +50,11 @@ void *thread_job(void *args){
 
 	if(abort_request == 0){
 		gettimeofday(&start, NULL);
-		if(worker.blocking == 1){
-			printf("sending Blocking request id:%d, service:%s\n", worker.id, worker.service_uri);
-			ret = linber_request_service(	worker.service_uri, worker.uri_len,	\
-											worker.rel_deadline, request, request_len,	\
-											&response, &response_len, &response_shm_mode);
+		printf("sending Blocking request id:%d, service:%s\n", worker.id, service_uri);
 
-		} else {
-			printf("sending NON Blocking request id:%d, service:%s\n", worker.id, worker.service_uri);
-			ret = linber_request_service_no_blocking(	worker.service_uri, worker.uri_len,	\
-														worker.rel_deadline, request, request_len,	\
-														&token);
-			if(ret >= 0){
-				sleep(1);
-				printf("Asking for response request id:%d, service:%s\n", worker.id, worker.service_uri);
-				ret = linber_request_service_get_response(	worker.service_uri, worker.uri_len,	\
-															&response, &response_len, &response_shm_mode,	\
-															&token);
-			}
-		}
+		ret = linber_request_service(	service_uri, uri_len,	\
+										worker.rel_deadline_ms, request, request_len,	\
+										&response, &response_len, &response_shm_mode);
 		if(ret < 0){
 			printf("request aborted\n");
 		} else {
@@ -82,53 +69,43 @@ void *thread_job(void *args){
 
 
 int main(int argc,char* argv[]){
-	char *service_uri = DEFAULT_SERVICE_URI;
-	int uri_len = strlen(service_uri);
-	int concurrent_requests = DEFAULT_CONCURRENT_REQUESTS;
-	int max_inter_request = DEFAULT_MAX_INTER_PERIOD;
-	int rel_deadline = DEFAULT_REL_DEADLINE;
 	int n;
-	if(argc >= 2){
+	if(argc >= 2){		// SERVICE URI
 		service_uri = malloc(strlen(argv[1])+1);
 		strcpy(service_uri, argv[1]);
 		uri_len = strlen(service_uri);
 	}
-	if(argc >= 3){
+	if(argc >= 3){		// CONCURRENT REQUESTS
 		n = atoi(argv[2]);
 		if(n > 0){
 			concurrent_requests = n;
 		}
 	}
-	if(argc >= 4){
+	if(argc >= 4){		// INTER REQUEST TIME
 		n = atoi(argv[3]);
-		if(n > 0){
+		if(n >= 0){
 			max_inter_request = n;
 		}
 	}
-	if(argc >= 5){
+	if(argc >= 5){		// MAX REL DEADLINE
 		n = atoi(argv[4]);
-		if(n > 0){
-			rel_deadline = n;
+		if(n >= 0){
+			max_rel_Deadline_ms = n;
 		}
 	}
 
 	printf("Running client test with %d concurrent requests on service %s\n", concurrent_requests, service_uri);
 	linber_init();
-
 	thread_info worker[concurrent_requests];
 	for(int i=0; i<concurrent_requests; i++){
-		worker[i].uri_len = uri_len;
-		worker[i].service_uri = service_uri;
 		worker[i].id = i;
-		if(i < concurrent_requests*0.5){
-			worker[i].blocking = 0;
-		} else {
-			worker[i].blocking = 1;
-		}
-		worker[i].blocking = 1;
-		worker[i].rel_deadline = rel_deadline;
 		if(max_inter_request > 0){
 			usleep(1000*(rand()%max_inter_request));
+		}
+		if(max_rel_Deadline_ms > 0){
+			worker[i].rel_deadline_ms = rand()%max_rel_Deadline_ms;
+		} else {
+			worker[i].rel_deadline_ms = 0;
 		}
 		int terr = pthread_create(&worker[i].tid, NULL, thread_job, (void*)&worker[i]);
 		if (terr != 0){
@@ -140,7 +117,9 @@ int main(int argc,char* argv[]){
 	for(int i=0; i<concurrent_requests; i++){
 		pthread_join(worker[i].tid, NULL);
 	}
-
+	if(argc >= 2){
+		free(service_uri);
+	}
 	linber_exit();
 }
 
