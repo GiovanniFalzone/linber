@@ -49,63 +49,64 @@ struct sched_attr {
 
 
 typedef struct RequestNode{
-	struct list_head list;
-	struct semaphore Request_sem;
-	unsigned long token;
-	bool request_accepted;
-	unsigned long abs_deadline_ns;
-	int result_cmd;
-	int request_len;
-	int response_len;
+	struct list_head list;				// used to implement the list
+	struct semaphore Request_sem;		// used to stop the client waiting for the response
+	unsigned long token;				// used to identify the single request when the client use a non blocking tecnique
+	bool request_accepted;				// used by workers to check if the request in the queue must be served or destroyied
+	unsigned long abs_deadline_ns;		// absolute deadline resect to boot time
+	int result_cmd;						// used to mark the request as completed or failed
+	unsigned int request_len;
+	unsigned int response_len;
 	bool response_shm_mode;
 	bool request_shm_mode;
 	union {
-		char * data;
+		char * data;					// address where is stored the payload
 		key_t shm_key;
 	} request;
 	union {
-		char * data;
+		char * data;					// address where is stored the payload
 		key_t shm_key;
 	} response;
 }RequestNode;
 
 
 typedef struct worker_struct{
-	struct task_struct *worker;
-	RequestNode *request; // array serving requests, size max workers
+	struct task_struct *task;				// worker process
+	RequestNode *request;					// array serving requests, size max workers
 }worker_struct;
 
 typedef struct ServiceNode{
-	int id;
-	struct list_head list;
-	unsigned long token;
-	char *uri;
-	int exec_time_ns;
-	int Request_count;
-	bool destroy_me;
+	struct list_head list;					// used to implement the list
+	char *uri;								// service uri
+	int id;									// used by idr to find the service without iterating on the list
+	unsigned long token;					// security, to check the operations called on a service
+	unsigned int period;					// CBS period
+	unsigned int budget;					// CBS budget
+	unsigned int exec_time_ns;				// execution time for a single request
+	unsigned int Request_count;				// how many pending requests
+	bool destroy_me;						// used to destroy to stop workers and requests coming while destroying
 
 	struct Workers{
-		worker_struct *worker_slots;
-		int Max_Workers;
-		int count_registered;
-		int next_id;
-		struct semaphore sem_for_request;
+		worker_struct *worker_slots;		// worker slot used to store the serving request and worker infos
+		unsigned int Max_Workers;			// predefined maximum number of workers
+		unsigned int count_registered;		// how many workers are registered out of Max_Workers
+		unsigned int next_id;				// used to identify the worker's slot in the array
+		struct semaphore sem_for_request;	// used to stop the workers when there are no pending requests
 	} Workers;
 
 	struct list_head RequestsHead;
-	struct list_head Completed_RequestsHead;
+	struct list_head Completed_RequestsHead;	// list of completed requests, the client take the request using a token
 
-	struct mutex service_mutex;
+	struct mutex service_mutex;				// to protect the lists and avoid to delete a node while another process is iterating
 }ServiceNode;
 
 struct linber_stuct{
-	struct task_struct *linber_manager;
-	struct list_head Services;
-	struct idr Services_idr;
+	struct list_head Services;				// queue list of services
+	struct idr Services_idr;				// idr of services, key:Service id, value: service node address
 	unsigned int Services_count;
-	unsigned int Request_count;
-	unsigned int Max_Working;
-	struct mutex mutex;
+	unsigned int Request_count;				// total number of request between services
+	unsigned int Max_Working;				// maximum number of workers between services
+	struct mutex mutex;						// used to protect the service list in case of deletion during iterating
 } linber;
 
 
@@ -263,13 +264,15 @@ static ServiceNode * linber_create_service(linber_service_struct *obj){
 	ser_node = kmalloc(sizeof(*ser_node) ,GFP_KERNEL);
 	INIT_LIST_HEAD(&ser_node->Completed_RequestsHead);
 	INIT_LIST_HEAD(&ser_node->RequestsHead);
-	get_random_bytes(&ser_node->token, sizeof(ser_node->token));
+	mutex_init(&ser_node->service_mutex);
+	get_random_bytes(&ser_node->token, sizeof(ser_node->token));	// 64 bit random token
 	ser_node->uri = obj->service_uri;
-	ser_node->exec_time_ns = obj->op_params.registration.exec_time_ns;
-	ser_node->exec_time_ns += (ser_node->exec_time_ns*20)/100;
 	ser_node->Request_count = 0;
 	ser_node->destroy_me = false;
-	mutex_init(&ser_node->service_mutex);
+
+	ser_node->exec_time_ns = obj->op_params.registration.exec_time_ns;
+	ser_node->budget = obj->op_params.registration.service_budget_ns;
+	ser_node->period = obj->op_params.registration.service_period_ns;
 
 	sema_init(&ser_node->Workers.sem_for_request, 0);
 	ser_node->Workers.Max_Workers = obj->op_params.registration.Max_Working;
@@ -278,7 +281,7 @@ static ServiceNode * linber_create_service(linber_service_struct *obj){
 	ser_node->Workers.worker_slots = kmalloc(ser_node->Workers.Max_Workers*sizeof(worker_struct), GFP_KERNEL);
 	for(id=0; id<ser_node->Workers.Max_Workers; id++){
 		ser_node->Workers.worker_slots[id].request = NULL;
-		ser_node->Workers.worker_slots[id].worker = NULL;
+		ser_node->Workers.worker_slots[id].task = NULL;
 	}
 
 
@@ -319,11 +322,11 @@ static RequestNode* enqueue_request_for_service(	ServiceNode *ser_node, 			\
 		req_node->request_len = request_len;
 
 		mutex_lock(&ser_node->service_mutex);
-			ser_node->Request_count++;
 			list_add_tail(&req_node->list, &ser_node->RequestsHead);
+			ser_node->Request_count++;
+			req_node->request_accepted = true;
 		mutex_unlock(&ser_node->service_mutex);
 
-		req_node->request_accepted = true;
 		up(&ser_node->Workers.sem_for_request);
 		if(blocking){
 			down(&req_node->Request_sem);
@@ -376,7 +379,7 @@ static worker_struct* get_worker_by_id(ServiceNode *ser_node, unsigned int worke
 	worker_struct *worker = NULL;
 	if((worker_id >= 0) && (worker_id < ser_node->Workers.Max_Workers)){
 		worker = &(ser_node->Workers.worker_slots[worker_id]);
-		if((worker->worker->pid != current->pid)){
+		if((worker->task->pid != current->pid)){
 			worker = NULL;
 		}
 	}
@@ -625,7 +628,7 @@ static int linber_register_service_worker(linber_service_struct *obj){
 				ser_node->Workers.count_registered++;
 				worker_id = ser_node->Workers.next_id++;
 			mutex_unlock(&ser_node->service_mutex);
-			ser_node->Workers.worker_slots[worker_id].worker = current;
+			ser_node->Workers.worker_slots[worker_id].task = current;
 			CHECK_MEMORY_ERROR(put_user(worker_id, obj->op_params.register_worker.ptr_worker_id));
 //-----------------------------------------------------
 // I don't know why but this is required
@@ -794,9 +797,11 @@ static int linber_get_system_status(void* system_user){
 						services[i].uri_len = strlen(ser_node->uri);
 						CHECK_MEMORY_ERROR(copy_to_user(services[i].uri, ser_node->uri, services[i].uri_len));
 					mutex_unlock(&ser_node->service_mutex);
-					services[i].exec_time_ms = ser_node_cpy.exec_time_ns/1000000;
 					services[i].Max_Working = ser_node_cpy.Workers.Max_Workers;
 					services[i].requests_count = ser_node_cpy.Request_count;
+					services[i].exec_time_ms = nSEC_TO_mSEC(ser_node_cpy.exec_time_ns);
+					services[i].period_ms = nSEC_TO_mSEC(ser_node->period);
+					services[i].budget_ms = nSEC_TO_mSEC(ser_node->budget);
 				}
 				i++;
 			}

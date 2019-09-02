@@ -48,8 +48,9 @@
 #define LINBER_REQUEST_WAITING		1
 #define LINBER_REQUEST_COMPLETED	2
 
-#define SEC_TO_NSEC(sec) sec*1000000000
-#define mSEC_TO_NSEX(msec) msec*1000000
+#define SEC_TO_nSEC(sec) sec	*1000000000
+#define mSEC_TO_nSEX(msec) msec	*1000000
+#define nSEC_TO_mSEC(nsec) nsec	/1000000
 
 #define FALSE	0
 #define TRUE	1
@@ -62,10 +63,12 @@ typedef struct linber_service_struct {
 	unsigned int service_uri_len;
 	union op_params{
 		struct registration {
-			unsigned long exec_time_ns;
 			unsigned int Max_Working;
 			int *ptr_service_id;
 			unsigned long *ptr_service_token;
+			unsigned long exec_time_ns;
+			unsigned int service_period_ns;
+			unsigned int service_budget_ns;
 		} registration;
 
 		struct register_worker {
@@ -123,9 +126,11 @@ typedef struct linber_service_struct {
 typedef struct service_status{
 	char * uri;
 	unsigned int uri_len;
-	unsigned long exec_time_ms;
 	unsigned int requests_count;
 	unsigned int Max_Working;
+	unsigned long exec_time_ms;
+	unsigned int budget_ms;
+	unsigned int period_ms;
 } service_status;
 
 typedef struct system_status {

@@ -9,17 +9,22 @@
 
 #include "../../libs/linber_service_api.h"
 
-#define DEFAULT_SERVICE_URI	"org.service\0"
-#define DEFAULT_JOB_EXEC_TIME	1	//ms
+#define DEFAULT_SERVICE_URI					"org.service\0"
+#define DEFAULT_JOB_EXEC_TIME				5	//ms
 #define DEFAULT_MAX_CONCURRENT_WORKERS		4
+#define DEFAULT_SERVICE_PERIOD				100
+#define DEFAULT_REQUEST_PER_PERIOD			2
 
 char *service_uri;
 int uri_len;
 int service_id;
 unsigned long service_token;
 int Max_Working = DEFAULT_MAX_CONCURRENT_WORKERS;
-int job_exec_time = DEFAULT_JOB_EXEC_TIME;
 int Abort_and_Exit = 0;
+int job_exec_time = DEFAULT_JOB_EXEC_TIME;
+int Service_period = DEFAULT_SERVICE_PERIOD;
+int Service_RPP = DEFAULT_REQUEST_PER_PERIOD;
+
 
 typedef struct{
 	pthread_t tid;
@@ -96,7 +101,7 @@ int main(int argc,char* argv[]){
 	if (signal(SIGINT, sig_handler) == SIG_ERR)
 		printf("can't catch SIGINT\n");
 
-	if(argc >= 2){
+	if(argc >= 2){		// SERVICE URI
 		service_uri = malloc(strlen(argv[1])+1);
 		strcpy(service_uri, argv[1]);
 	} else {
@@ -104,26 +109,41 @@ int main(int argc,char* argv[]){
 		strcpy(service_uri, DEFAULT_SERVICE_URI);
 	}
 
-	if(argc >= 3){
+	if(argc >= 3){		// Number of Workers
 		int n = atoi(argv[2]);
 		if(n > 0){
 			Max_Working = n;
 		}
 	}
 
-	if(argc >= 4){
+	if(argc >= 4){		// Execution time
 		int n = atoi(argv[3]);
 		if(n >= 0){
 			job_exec_time = n;
 		}
 	}
 
+	if(argc >= 5){		// Period
+		int n = atoi(argv[4]);
+		if(n > 0){
+			Service_period = n;
+		}
+	}
+
+	if(argc >= 6){		// Request per period
+		int n = atoi(argv[5]);
+		if(n > 0){
+			Service_RPP = n;
+		}
+	}
+
+
 	uri_len = strlen(service_uri);
 
 	printf("Running Service Server %s with %d workers, job exec time:%d\n", service_uri, Max_Working, job_exec_time);
 
 	linber_init();
-	linber_register_service(service_uri, uri_len, &service_id, job_exec_time, Max_Working, &service_token);
+	linber_register_service(service_uri, uri_len, &service_id, job_exec_time, Max_Working, &service_token, Service_period, Service_RPP);
 	printf("registered service, id:%i, starting thread pool\n", service_id);
 	int workers_num = Max_Working;
 	thread_info worker[workers_num];

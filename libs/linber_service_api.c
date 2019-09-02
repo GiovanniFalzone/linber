@@ -56,15 +56,28 @@ int ioctl_send(unsigned int cmd, void* param){
 }
 
 //------------------------------------------------
-int linber_register_service(char *service_uri, unsigned int uri_len, int *service_id, unsigned int exec_time, unsigned int max_workers, unsigned long *service_token){
+int linber_register_service(	char *service_uri,					\
+								unsigned int uri_len,				\
+								int *service_id,					\
+								unsigned int exec_time,				\
+								unsigned int max_workers,			\
+								unsigned long *service_token,		\
+								unsigned int service_period,		\
+								unsigned int Request_Per_Period
+							){
 	int ret = 0;
 	linber_service_struct param;
 	param.service_uri = service_uri;
 	param.service_uri_len = uri_len;
-	param.op_params.registration.exec_time_ns = exec_time*1000000;
 	param.op_params.registration.Max_Working = max_workers;
 	param.op_params.registration.ptr_service_id = service_id;
 	param.op_params.registration.ptr_service_token = service_token;
+
+	param.op_params.registration.exec_time_ns = mSEC_TO_nSEX(exec_time);
+	param.op_params.registration.exec_time_ns += (param.op_params.registration.exec_time_ns*5)/100;	// add 5% to declared exec time
+	param.op_params.registration.service_period_ns = mSEC_TO_nSEX(service_period);
+	param.op_params.registration.service_budget_ns = param.op_params.registration.exec_time_ns * Request_Per_Period;
+
 	ret = ioctl_send(IOCTL_REGISTER_SERVICE, &param);
 	switch(ret){
 		case 0:
@@ -78,7 +91,11 @@ int linber_register_service(char *service_uri, unsigned int uri_len, int *servic
 	return ret;
 }
 
-int linber_register_service_worker(char *service_uri, unsigned int uri_len, unsigned long service_token, unsigned int * worker_id, char **file_str){
+int linber_register_service_worker(	char *service_uri,				\
+									unsigned int uri_len,			\
+									unsigned long service_token,	\
+									unsigned int * worker_id,		\
+									char **file_str){
 	int ret = 0, fd, file_str_len;
 	char worker_id_str[4];
 	linber_service_struct param;
@@ -210,10 +227,14 @@ char* attach_shm_from_key(key_t key, int len, int *id){
 	return shm;
 }
 //------------------------------------------------------
-int linber_request_service(char *service_uri, unsigned int uri_len, unsigned int rel_deadline_ms,\
-							char *request, int request_len,\
-							char **response, int *response_len,
-							boolean *response_shm_mode
+int linber_request_service(	char *service_uri,				\
+							unsigned int uri_len,			\
+							unsigned int rel_deadline_ms,	\
+							char *request,					\
+							int request_len,				\
+							char **response,				\
+							int *response_len,				\
+							boolean *response_shm_mode		\
 							){
 	int ret = 0, response_shm_id;
 	unsigned long token;
@@ -234,9 +255,9 @@ int linber_request_service(char *service_uri, unsigned int uri_len, unsigned int
 	if(rel_deadline_ms == 0){
 		param.op_params.request.abs_deadline_ns = -1; // -1 for an unsigned is converted to the maximum value
 	} else {
-		param.op_params.request.abs_deadline_ns = SEC_TO_NSEC(now.tv_sec);
+		param.op_params.request.abs_deadline_ns = SEC_TO_nSEC(now.tv_sec);
 		param.op_params.request.abs_deadline_ns += now.tv_nsec;
-		param.op_params.request.abs_deadline_ns += mSEC_TO_NSEX(rel_deadline_ms);
+		param.op_params.request.abs_deadline_ns += mSEC_TO_nSEX(rel_deadline_ms);
 	}
 
 	param.op_params.request.ptr_token = &token;
@@ -283,10 +304,14 @@ int linber_request_service(char *service_uri, unsigned int uri_len, unsigned int
 	return ret;
 }
 
-int linber_request_service_shm(char *service_uri, unsigned int uri_len, unsigned int rel_deadline_ms,\
-							key_t request_key, int request_len,\
-							char **response, int *response_len,
-							boolean *response_shm_mode	
+int linber_request_service_shm(	char *service_uri,				\
+								unsigned int uri_len,			\
+								unsigned int rel_deadline_ms,	\
+								key_t request_key, 				\
+								int request_len,				\
+								char **response,				\
+								int *response_len,				\
+								boolean *response_shm_mode		\
 							){
 	int ret = 0, response_shm_id;
 	unsigned long token;
@@ -307,9 +332,9 @@ int linber_request_service_shm(char *service_uri, unsigned int uri_len, unsigned
 	if(rel_deadline_ms == 0){
 		param.op_params.request.abs_deadline_ns = -1; // -1 for an unsigned is converted to the maximum value
 	} else {
-		param.op_params.request.abs_deadline_ns = SEC_TO_NSEC(now.tv_sec);
+		param.op_params.request.abs_deadline_ns = SEC_TO_nSEC(now.tv_sec);
 		param.op_params.request.abs_deadline_ns += now.tv_nsec;
-		param.op_params.request.abs_deadline_ns += mSEC_TO_NSEX(rel_deadline_ms);;
+		param.op_params.request.abs_deadline_ns += mSEC_TO_nSEX(rel_deadline_ms);;
 	}
 
 	param.op_params.request.ptr_token = &token;
@@ -357,9 +382,13 @@ int linber_request_service_shm(char *service_uri, unsigned int uri_len, unsigned
 	return ret;
 }
 
-int linber_request_service_no_blocking(char *service_uri, unsigned int uri_len, unsigned int rel_deadline_ms,\
-										char *request, int request_len,\
-										unsigned long *ptr_token){
+int linber_request_service_no_blocking(	char *service_uri, 				\
+										unsigned int uri_len, 			\
+										unsigned int rel_deadline_ms,	\
+										char *request, 					\
+										int request_len,				\
+										unsigned long *ptr_token		\
+									){
 	int ret = 0;
 	linber_service_struct param;
 	struct timespec now;
@@ -377,9 +406,9 @@ int linber_request_service_no_blocking(char *service_uri, unsigned int uri_len, 
 	if(rel_deadline_ms == 0){
 		param.op_params.request.abs_deadline_ns = -1; // -1 for an unsigned is converted to the maximum value
 	} else {
-		param.op_params.request.abs_deadline_ns = SEC_TO_NSEC(now.tv_sec);
+		param.op_params.request.abs_deadline_ns = SEC_TO_nSEC(now.tv_sec);
 		param.op_params.request.abs_deadline_ns += now.tv_nsec;
-		param.op_params.request.abs_deadline_ns += mSEC_TO_NSEX(rel_deadline_ms);;
+		param.op_params.request.abs_deadline_ns += mSEC_TO_nSEX(rel_deadline_ms);;
 	}
 
 	param.op_params.request.ptr_token = ptr_token;
@@ -397,9 +426,13 @@ int linber_request_service_no_blocking(char *service_uri, unsigned int uri_len, 
 	return ret;
 }
 
-int linber_request_service_no_blocking_shm(char *service_uri, unsigned int uri_len, unsigned int rel_deadline_ms,\
-										key_t request_key, int request_len,\
-										unsigned long *ptr_token){
+int linber_request_service_no_blocking_shm(	char *service_uri, 				\
+											unsigned int uri_len, 			\
+											unsigned int rel_deadline_ms,	\
+											key_t request_key, 				\
+											int request_len,				\
+											unsigned long *ptr_token		\
+										){
 	int ret = 0;
 	linber_service_struct param;
 	struct timespec now;
@@ -417,9 +450,9 @@ int linber_request_service_no_blocking_shm(char *service_uri, unsigned int uri_l
 	if(rel_deadline_ms == 0){
 		param.op_params.request.abs_deadline_ns = -1; // -1 for an unsigned is converted to the maximum value
 	} else {
-		param.op_params.request.abs_deadline_ns = SEC_TO_NSEC(now.tv_sec);
+		param.op_params.request.abs_deadline_ns = SEC_TO_nSEC(now.tv_sec);
 		param.op_params.request.abs_deadline_ns += now.tv_nsec;
-		param.op_params.request.abs_deadline_ns += mSEC_TO_NSEX(rel_deadline_ms);;
+		param.op_params.request.abs_deadline_ns += mSEC_TO_nSEX(rel_deadline_ms);;
 	}
 
 
@@ -439,10 +472,12 @@ int linber_request_service_no_blocking_shm(char *service_uri, unsigned int uri_l
 	return ret;
 }
 
-int linber_request_service_get_response(char *service_uri, unsigned int uri_len,	\
-										char **response, int *response_len,			\
-										boolean *response_shm_mode,					\
-										unsigned long *ptr_token
+int linber_request_service_get_response(	char *service_uri, 					\
+											unsigned int uri_len,				\
+											char **response, 					\
+											int *response_len,					\
+											boolean *response_shm_mode,			\
+											unsigned long *ptr_token			\
 										){
 	int ret = 0, response_shm_id;
 	linber_service_struct param;
@@ -504,11 +539,15 @@ void linber_request_service_clean(char *request, boolean shm_request_mode, char 
 }
 
 //-----------------------------------------------------------------------
-int linber_start_job_service(	char *service_uri, unsigned int uri_len,		\
-								int service_id, unsigned long service_token,	\
-								unsigned int worker_id,	\
-								char **request, int *request_len, 				\
-								boolean *request_shm_mode){
+int linber_start_job_service(	char *service_uri, 								\
+								unsigned int uri_len,							\
+								int service_id, 								\
+								unsigned long service_token,					\
+								unsigned int worker_id,							\
+								char **request, 								\
+								int *request_len, 								\
+								boolean *request_shm_mode						\
+							){
 	int ret = 0, request_shm_id;
 	key_t request_key;
 	linber_service_struct param;
@@ -555,11 +594,16 @@ int linber_start_job_service(	char *service_uri, unsigned int uri_len,		\
 	return ret;
 }
 
-int linber_end_job_service(	char *service_uri, unsigned int uri_len,			\
-							int service_id, unsigned long service_token,		\
-							unsigned int worker_id,		\
-							char *request, boolean request_shm_mode,			\
-							char *response, int response_len){
+int linber_end_job_service(	char *service_uri, 				\
+							unsigned int uri_len,			\
+							int service_id, 				\
+							unsigned long service_token,	\
+							unsigned int worker_id,			\
+							char *request, 					\
+							boolean request_shm_mode,		\
+							char *response, 				\
+							int response_len				\
+						){
 	int ret = 0;
 	linber_service_struct param;
 
@@ -595,11 +639,17 @@ int linber_end_job_service(	char *service_uri, unsigned int uri_len,			\
 	return ret;
 }
 
-int linber_end_job_service_shm(	char *service_uri, unsigned int uri_len,		\
-								int service_id, unsigned long service_token,	\
-								unsigned int worker_id,	\
-								char *request, boolean request_shm,				\
-								char *response, int response_len, key_t response_key){
+int linber_end_job_service_shm(	char *service_uri, 				\
+								unsigned int uri_len,			\
+								int service_id, 				\
+								unsigned long service_token,	\
+								unsigned int worker_id,			\
+								char *request, 					\
+								boolean request_shm,			\
+								char *response, 				\
+								int response_len, 				\
+								key_t response_key				\
+							){
 	int ret = 0;
 	linber_service_struct param;
 

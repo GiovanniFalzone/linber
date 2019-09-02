@@ -44,8 +44,8 @@ int main(int argc,char* argv[]){
 				load = ((service.requests_count*100) / service.Max_Working);
 				if(load > 100) load = 100;
 			}
-			printf("Service %s, ExecTime: %lu, Max Concurrent Workers %d Requests:%d, Load: %d\n", \
-					service.uri, service.exec_time_ms, service.Max_Working, service.requests_count, load);
+			printf("Ser: %s, |ExecT: %lu, (P:%d, Q:%d)| Max_Workers %d Requests:%d, Load: %d\n", \
+				service.uri, service.exec_time_ms, service.period_ms, service.budget_ms, service.Max_Working, service.requests_count, load);
 		}
 	}
 	linber_exit();
