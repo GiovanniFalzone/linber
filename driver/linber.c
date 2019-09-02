@@ -420,14 +420,23 @@ static RequestNode* worker_wait_for_request(ServiceNode *ser_node, unsigned int 
 	RequestNode *req_node = NULL;
 	worker_struct *worker = NULL;
 
+	worker = get_worker_by_id(ser_node, worker_id);
+	if(worker == NULL){
+		return NULL;
+	}
+
+	if(worker->request != NULL){
+		// Job Fault, Worker executed StartJob without executing EndJob, possible in some error
+		up(&worker->request->Request_sem);	// end job
+		worker->request = NULL;
+	}
+
 	down_interruptible(&ser_node->Workers.sem_for_request);		// wait for request
+
 	if(Service_check_alive(ser_node) >= 0){
-		worker = get_worker_by_id(ser_node, worker_id);
-		if(worker != NULL){
-			req_node = get_request(ser_node);
-			if(req_node != NULL){
-				worker->request = req_node;
-			}
+		req_node = get_request(ser_node);
+		if(req_node != NULL){
+			worker->request = req_node;
 		}
 	}
 	return req_node;
@@ -475,18 +484,17 @@ static int linber_request_service(linber_service_struct *obj){
 	ser_node = findService(obj->service_uri);
 	if(ser_node != NULL && (!ser_node->destroy_me)){
 		status = obj->op_params.request.status;
-		request_len = obj->op_params.request.request_len;
-		shm_mode = (obj->op_params.request.request_shm_mode == 1);
-		blocking = (obj->op_params.request.blocking == 1);
-		abs_deadline_ns = obj->op_params.request.abs_deadline_ns;
-	
-		if(!shm_mode && (request_len > LINBER_MAX_MEM_SIZE)){
-			return LINBER_PAYLOAD_SIZE_ERROR;
-		}
 
 		//----------------------init-----------------------
 		if(status == LINBER_REQUEST_INIT){
+			request_len = obj->op_params.request.request_len;
+			shm_mode = (obj->op_params.request.request_shm_mode == 1);
+			blocking = (obj->op_params.request.blocking == 1);
+			abs_deadline_ns = obj->op_params.request.abs_deadline_ns;
 			if(!shm_mode){
+				if(request_len > LINBER_MAX_MEM_SIZE){
+					return LINBER_PAYLOAD_SIZE_ERROR;
+				}
 				request = kmalloc(request_len, GFP_KERNEL);
 				CHECK_MEMORY_ERROR(copy_from_user(request, obj->op_params.request.request.data, request_len));
 			} else {

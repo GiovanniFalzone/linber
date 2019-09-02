@@ -26,7 +26,7 @@ int linber_register_service_worker(char *service_uri, unsigned int uri_len, unsi
 void linber_destroy_worker(char *file_str);
 
 char *create_shm_from_key(key_t key, int len, int *id);
-char *create_shm_from_filepath(char* file_str, int len, key_t *key, int *id);
+char *create_shm_from_filepath(char* file_str, int low_id, int len, key_t *key, int *id);
 void detach_shm(void *addr);
 
 char* attach_shm_from_key(key_t key, int len, int *id);

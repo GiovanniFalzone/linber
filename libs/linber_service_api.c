@@ -1,6 +1,5 @@
 #include <time.h>
 #include "linber_service_api.h"
-//#define DEBUG_MESSAGE
 
 int linber_fd = -1;
 
@@ -181,13 +180,12 @@ char *create_shm_from_key(key_t key, int len, int *id){
 	return shm;
 }
 
-char *create_shm_from_filepath(char* file_str, int len, key_t *key, int *id){
-	static int low_id = 0;
+char *create_shm_from_filepath(char* file_str, int low_id, int len, key_t *key, int *id){
+	low_id = (low_id + 1)%255;
 	if((*key = ftok(file_str, low_id)) == (key_t) -1) {
 		printf("IPC error: ftok\n");
 		return NULL;
 	}
-	low_id = (low_id + 1)%255;
 	return create_shm_from_key(*key, len, id);
 }
 
@@ -200,13 +198,14 @@ void detach_shm(void *addr){
 char* attach_shm_from_key(key_t key, int len, int *id){
 	char *shm;
 
-	if ((*id = shmget(key, len, 0666)) < 0) {
-		printf("shmget error\n");
+	if((*id = shmget(key, len, 0666)) < 0) {
+		printf("shmget error key:%d len:%d, id:%d\n", key, len, *id);
 		return NULL;
-	}
-	if ((shm = (char*)shmat(*id, NULL, 0)) == (char *) -1) {
-		printf("shmat error\n");
-		return NULL;
+	} else {
+		if ((shm = (char*)shmat(*id, NULL, 0)) == (char *) -1) {
+			printf("shmat error key:%d len:%d, id:%d\n", key, len, *id);
+			return NULL;
+		}
 	}
 	return shm;
 }
@@ -261,6 +260,9 @@ int linber_request_service(char *service_uri, unsigned int uri_len, unsigned int
 				printf("response in shared memory, key:%d\n", response_key);
 			#endif
 			*response = attach_shm_from_key(response_key, *response_len, &response_shm_id);
+			if(response == NULL){
+				return LINBER_REQUEST_FAILED;				
+			}
 			shmctl(response_shm_id, IPC_RMID, NULL);	// self destroy
 
 		} else {
@@ -332,6 +334,9 @@ int linber_request_service_shm(char *service_uri, unsigned int uri_len, unsigned
 				printf("response in shared memory, key:%d\n", response_key);
 			#endif
 			*response = attach_shm_from_key(response_key, *response_len, &response_shm_id);
+			if(response == NULL){
+				return LINBER_REQUEST_FAILED;				
+			}
 			shmctl(response_shm_id, IPC_RMID, NULL);	// self destroy
 		} else {
 			*response = (char*)malloc(*response_len);
@@ -462,6 +467,9 @@ int linber_request_service_get_response(char *service_uri, unsigned int uri_len,
 				printf("response in shared memory, key:%d\n", response_key);
 			#endif
 			*response = attach_shm_from_key(response_key, *response_len, &response_shm_id);
+			if(response == NULL){
+				return LINBER_REQUEST_FAILED;				
+			}
 			shmctl(response_shm_id, IPC_RMID, NULL);	// self destroy
 		} else {
 			*response = (char*)malloc(*response_len);
@@ -520,6 +528,9 @@ int linber_start_job_service(	char *service_uri, unsigned int uri_len,		\
 				printf("request in shared memory, key:%d\n", request_key);
 			#endif
 			*request = attach_shm_from_key(request_key, *request_len, &request_shm_id);
+			if(request == NULL){
+				return LINBER_SERVICE_SKIP_JOB;
+			}
 			shmctl(request_shm_id, IPC_RMID, NULL);	// self destroy
 		} else {
 			*request = (char*)malloc(*request_len);

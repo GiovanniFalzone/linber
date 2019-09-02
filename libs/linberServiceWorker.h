@@ -72,7 +72,7 @@ public:
 			request_shm_mode = false;
 			ret = linber_start_job_service(	service_uri, uri_len,				\
 											service_id, service_token,			\
-											worker_id,				\
+											worker_id,							\
 											&request, &request_len, &request_shm_mode);
 
 			if(ret < 0){

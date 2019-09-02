@@ -63,9 +63,9 @@ class linberClient {
 	void linber_create_shm(char **req, int req_len){
 		key_t shm_key;
 		int shm_id;
-
+		static int low_id = 0;
 		if((request_state == 0) && (request_shm_state == -1)){
-			*req = create_shm_from_filepath(".", req_len, &shm_key, &shm_id);
+			*req = create_shm_from_filepath(".", low_id++, req_len, &shm_key, &shm_id);
 			if(*req == NULL){
 				printf("Error in shared memory allocation\n");
 				return;

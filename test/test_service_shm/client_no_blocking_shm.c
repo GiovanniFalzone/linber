@@ -10,9 +10,9 @@
 
 
 #define DEFAULT_SERVICE_URI	"org.service\0"
-#define DEFAULT_CONCURRENT_REQUESTS	4
+#define DEFAULT_CONCURRENT_REQUESTS	16
 #define DEFAULT_MAX_INTER_PERIOD	0
-#define DEFAULT_REL_DEADLINE		0	// 0 for best effor
+#define DEFAULT_REL_DEADLINE		0	// 0 for best effort
 #define TIME_BEFORE_RESPONSE		1	// waiting time before asking for the response
 
 int abort_request = 0;
@@ -41,25 +41,35 @@ void *thread_job(void *args){
 	unsigned long passed_millis = 0;
 	int ret = 0;
 	unsigned long token;
-	int request_len = strlen("ciao\0") + 1;
-	char *request = malloc(request_len);	// request will be free by linber_request_service_clean
+	int request_len;
+	char *request;
+	key_t request_shm_key;
+	int request_shm_id;
 	char *response;
 	int response_len;
 	boolean response_shm_mode;
+	static int low_id = 0;
 
+	request_len = strlen("ciao\0") + 1;
+	request = create_shm_from_filepath(".", low_id++, request_len, &request_shm_key, &request_shm_id);
+
+	if(request == NULL){
+		printf("Error in shared memory allocation\n");
+		return NULL;
+	}
 	strcpy(request, "ciao\0");
 	request[request_len-1] = '\0';
 
 	if(abort_request == 0){
 		gettimeofday(&start, NULL);
 		printf("sending NON Blocking request id:%d, service:%s\n", worker.id, service_uri);
-		ret = linber_request_service_no_blocking(	service_uri, uri_len,	\
-													worker.rel_deadline_ms, request, request_len,	\
-													&token);
+		ret = linber_request_service_no_blocking_shm(	service_uri, uri_len,									\
+														worker.rel_deadline_ms, request_shm_key, request_len,	\
+														&token);
 		if(ret >= 0){
 			sleep(TIME_BEFORE_RESPONSE);
 			printf("Asking for response request id:%d, service:%s\n", worker.id, service_uri);
-			ret = linber_request_service_get_response(	service_uri, uri_len,	\
+			ret = linber_request_service_get_response(	service_uri, uri_len,							\
 														&response, &response_len, &response_shm_mode,	\
 														&token);
 		}
@@ -67,13 +77,17 @@ void *thread_job(void *args){
 			printf("request aborted\n");
 		} else {
 			gettimeofday(&end, NULL);
-			passed_millis = (end.tv_sec - start.tv_sec)*1000 + (end.tv_usec - start.tv_usec)/1000;
+			passed_millis = (end.tv_sec - start.tv_sec) * 1000 + (end.tv_usec - start.tv_usec) / 1000;
 			printf("Request %d Response: %d %s served in %lu ms\n", worker.id, response_len, response, passed_millis);
 		}
-		linber_request_service_clean(request, FALSE, response, response_shm_mode);
+
+		linber_request_service_clean(request, TRUE, response, response_shm_mode);
+
 	}
 	return NULL;
 }
+
+
 
 int main(int argc,char* argv[]){
 	int n;

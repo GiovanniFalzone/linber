@@ -4,72 +4,70 @@
 #include <unistd.h>
 #include <string.h>
 #include "../../libs/linber_service_api.h"
-#include <sys/time.h>
-
-#define ITERATION_SAME_REQUEST	1000
+#include <time.h>
 
 #define DEFAULT_SERVICE_URI	"org.service\0"
+
+#define ITERATION_FOR_MIN	1000
+#define MAX_SIZE			1<<20
 
 char *service_uri;
 int uri_len;
 
-int get_service_time(unsigned int req_size, int blocking, unsigned int *min_micros, unsigned int *avg_micros){
+int get_service_time(unsigned int req_size, unsigned int *min_nsec, unsigned int *avg_nsec){
 	char *request;
 	int request_len;
+	char *response;
+	boolean response_shm_mode = FALSE;
+	int response_len;
+	struct timespec start, end;
+	unsigned long passed_nanos = 0, min_time_nanos = -1, avg_nanos = 0;
+	int ret = 0;
 	key_t request_shm_key;
 	int request_shm_id;
-	char *response;
-	int response_len;
-	boolean response_shm_mode;
-	struct timeval start, end;
-	unsigned long passed_micros = 0, min_time_micros = 1000000, avg_time_micros = 0;
-	int ret = 0;
-	unsigned long token;
+	static int low_id = 0;
 
-	for(int i=0; i<ITERATION_SAME_REQUEST; i++){
+	for(int i=0; i<ITERATION_FOR_MIN; i++){
+		*avg_nsec = 0;
+		*min_nsec = 0;
+
 		request_len = req_size + 1;
-		request = create_shm_from_filepath(".", request_len, &request_shm_key, &request_shm_id);
+		request = create_shm_from_filepath(".", low_id++, request_len, &request_shm_key, &request_shm_id);
+
 		if(request == NULL){
 			printf("Error in shared memory allocation\n");
 			return -1;
 		}
 
-		#ifdef DEBUG
-			request[request_len - 1] = '\0';
-			memset(request, 'X', req_size);
-		#endif
-
-		gettimeofday(&start, NULL);
-		if(blocking == 1){
-			ret = linber_request_service_shm(	service_uri, uri_len,			\
-												1, request_shm_key, request_len,	\
-												&response, &response_len, &response_shm_mode);
-		} else {
-			ret = linber_request_service_no_blocking_shm(	service_uri, uri_len,		\
-														1, request_shm_key, request_len,	\
-														&token);
-			if(ret >= 0){
-				ret = linber_request_service_get_response(	service_uri, uri_len,							\
-															&response, &response_len, &response_shm_mode,	\
-															&token);
-			}
+		if(clock_gettime(CLOCK_MONOTONIC, &start) == -1){
+			perror("clock gettime error\n");
 		}
 
-		linber_request_service_clean(request, TRUE, response, response_shm_mode);
+		ret = linber_request_service_shm(	service_uri, uri_len,						\
+											0, request_shm_key, request_len,			\
+											&response, &response_len, &response_shm_mode);
+
+
+		if(clock_gettime(CLOCK_MONOTONIC, &end) == -1){
+			perror("clock gettime error\n");
+		}
 
 		if(ret < 0){
-			printf("request aborted\n");
-		} else {
-			gettimeofday(&end, NULL);
-			passed_micros = (end.tv_usec - start.tv_usec);
-			avg_time_micros += passed_micros;
-			if(passed_micros < min_time_micros){
-				min_time_micros = passed_micros;
-			}
+			printf("aborted\n");
+			return ret;
+		}
+		linber_request_service_clean(request, TRUE, response, response_shm_mode);
+
+		passed_nanos = SEC_TO_NSEC(end.tv_sec - start.tv_sec);
+		passed_nanos += (end.tv_nsec - start.tv_nsec);
+
+		avg_nanos += passed_nanos;
+		if(passed_nanos < min_time_nanos){
+			min_time_nanos = passed_nanos;
 		}
 	}
-	*avg_micros = avg_time_micros/ITERATION_SAME_REQUEST;
-	*min_micros = min_time_micros;
+	*avg_nsec = avg_nanos/ITERATION_FOR_MIN;
+	*min_nsec = min_time_nanos;
 	return 0;
 }
 
@@ -83,7 +81,7 @@ void save_in_csv(unsigned int mat[][3], int n){
 
 	fp=fopen(strcat(file_name, ".csv"), "w+");
 
-	fprintf(fp, "Size, Micros\n");
+	fprintf(fp, "Size, Min_ns, Avg_ns\n");
 	for(i=0; i<n; i++){
 		for(j=0; j<3; j++){
 			if(j < 3-1){
@@ -101,28 +99,27 @@ int main(int argc,char* argv[]){
 	unsigned int min_size = 1;
 	unsigned int size=min_size;
 	int iterations = 10;
-	unsigned int min_micros, avg_micros;
+	unsigned int min_nsec, avg_nsec;
 
 	service_uri = DEFAULT_SERVICE_URI;
 	uri_len = strlen(service_uri);
-	if(argc >= 2){
+	if(argc >= 2){		// SERVICE URI
 		service_uri = malloc(strlen(argv[1])+1);
 		strcpy(service_uri, argv[1]);
 		uri_len = strlen(service_uri);
 	}
-	if(argc >= 3){
+	if(argc >= 3){		// MIN SIZE
 		int n = atoi(argv[2]);
 		if(n > 0){
 			min_size = n;
 		}
 	}
-	if(argc >= 4){
+	if(argc >= 4){		// HOW MANY TIMES TO MULTIPLY MIN SIZE BY 2
 		int n = atoi(argv[3]);
 		if(n > 0){
 			iterations = n;
 		}
 	}
-
 
 	size=min_size;
 	iterations++;
@@ -131,11 +128,16 @@ int main(int argc,char* argv[]){
 	linber_init();
 	printf("Running efficiency test on service %s\n", service_uri);
 	for(int i=0; i<iterations; i++, size = size << 1){
-		get_service_time(size, 1, &min_micros, &avg_micros);
+		if(size > MAX_SIZE){
+			printf("maximum allowed dimension %d\n", MAX_SIZE);
+			break;
+		}
+
+		get_service_time(size, &min_nsec, &avg_nsec);
 		mat[i][0] = size;
-		mat[i][1] = min_micros;
-		mat[i][2] = avg_micros;
-		printf("Iteration:%d, size:%u, min: %u avg: %u\n", i, mat[i][0], mat[i][1], mat[i][2]);
+		mat[i][1] = min_nsec;
+		mat[i][2] = avg_nsec;
+		printf("Iteration:%d, size:%u, min_us: %u avg_us: %u\n", i, mat[i][0], mat[i][1]/1000, mat[i][2]/1000);
 	}
 	linber_exit();
 

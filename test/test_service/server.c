@@ -7,10 +7,6 @@
 #include <sys/time.h>
 #include <signal.h>
 
-#include <sys/types.h>
-
-#include "sched.h"
-
 #include "../../libs/linber_service_api.h"
 
 #define DEFAULT_SERVICE_URI	"org.service\0"
@@ -21,9 +17,9 @@ char *service_uri;
 int uri_len;
 int service_id;
 unsigned long service_token;
-int abort_and_Exit = 0;
 int Max_Working = DEFAULT_MAX_CONCURRENT_WORKERS;
 int job_exec_time = DEFAULT_JOB_EXEC_TIME;
+int Abort_and_Exit = 0;
 
 typedef struct{
 	pthread_t tid;
@@ -34,7 +30,7 @@ typedef struct{
 void sig_handler(int signo){
   if (signo == SIGINT){
     printf("received SIGINT\n");
-	abort_and_Exit = 1;
+	Abort_and_Exit = 1;
 	linber_destroy_service(service_uri, uri_len, service_token);
   }
 }
@@ -46,10 +42,12 @@ void *thread_job(void *args){
 	boolean request_shm_mode;
 	thread_info worker = *(thread_info*)args;
 	struct timeval start, end;
+	unsigned long passed_millis = 0;
 
 	if(linber_register_service_worker(service_uri, uri_len,worker.service_token, &worker_id, &file_str) == 0){
 		printf("started_thread id:%d, service:%s\n", worker_id, service_uri);
-		while(1){
+		while(Abort_and_Exit == 0){
+			request_shm_mode = FALSE;
 			ret = linber_start_job_service(	service_uri, uri_len,				\
 											service_id, worker.service_token,	\
 											worker_id,				\
@@ -58,22 +56,27 @@ void *thread_job(void *args){
 				break;
 			}
 			if(ret != LINBER_SERVICE_SKIP_JOB){
+				response_len = request_len;
+				response = malloc(response_len);	// response will be free by linber_request_service_clean
+
 				gettimeofday(&start, NULL);
-				unsigned long passed_millis = 0;
 				do{
 					gettimeofday(&end, NULL);
-					passed_millis = (end.tv_usec - start.tv_usec) * 0.001;
+					passed_millis = (end.tv_sec - start.tv_sec)*1000;
+					passed_millis = (end.tv_usec - start.tv_usec)*0.001;
 				} while(passed_millis < worker.exec_time);
+				#ifdef DEBUG_MESSAGE
+					printf("thread id:%d job#:%d, serving request, %s %d\n", worker_id, job_num++, request, request_len);
+					memcpy(response, request, response_len);
+					printf("response: %s\n", response);
+				#endif
+
+				ret = linber_end_job_service(	service_uri, uri_len,				\
+												service_id, worker.service_token,	\
+												worker_id,							\
+												request, request_shm_mode,			\
+												response, response_len);
 			}
-
-			response_len = request_len;
-			response = malloc(response_len);	// response will be free by linber_request_service_clean
-
-			ret = linber_end_job_service(	service_uri, uri_len,				\
-											service_id, worker.service_token,	\
-											worker_id,							\
-											request, request_shm_mode,			\
-											response, response_len);
 		}
 	}
 	linber_destroy_worker(file_str);
