@@ -13,7 +13,7 @@
 #define DEFAULT_JOB_EXEC_TIME				5	//ms
 #define DEFAULT_MAX_CONCURRENT_WORKERS		4
 #define DEFAULT_SERVICE_PERIOD				100
-#define DEFAULT_REQUEST_PER_PERIOD			2
+#define DEFAULT_REQUEST_PER_PERIOD			1
 
 char *service_uri;
 int uri_len;

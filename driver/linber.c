@@ -28,8 +28,8 @@
 #define CHECK_MEMORY_ERROR(value) if((value)!=0){return LINBER_USER_MEMORY_ERROR;}
 #define CHECK_KMALLOC_ERROR(value) if((value) == NULL){return LINBER_KERNEL_MEMORY_ERROR;}
 
-//#define DEBUG_MODULE
-//#define DEBUG_RT
+#define DEBUG_MODULE
+#define DEBUG_RT
 
 static int dev_major;
 static struct class* 	dev_class	= NULL; ///< The device-driver class struct pointer
@@ -523,6 +523,8 @@ static int Dispatch_as_RealTime(unsigned long exec_time_ns, unsigned long period
 	attr.size = sizeof(struct sched_attr);
 	attr.sched_flags = 0;//SCHED_FLAG_RECLAIM | SCHED_FLAG_RESET_ON_FORK;
 	attr.sched_policy = SCHED_DEADLINE;
+	attr.sched_nice = 0;
+	attr.sched_priority = 0;
 	attr.sched_runtime = exec_time_ns;
 	attr.sched_period = period_ns;
 	attr.sched_deadline = rel_deadline_ns;
@@ -553,10 +555,6 @@ static int linber_register_service_worker(linber_service_struct *obj){
 			mutex_unlock(&ser_node->service_mutex);
 			ser_node->Workers.worker_slots[worker_id].task = current;
 			CHECK_MEMORY_ERROR(put_user(worker_id, obj->op_params.register_worker.ptr_worker_id));
-//-----------------------------------------------------
-// I don't know why but this is necessary or the next requests for SCHED_DEADLINE will return EINVAL
-			Dispatch_as_RealTime(ser_node->budget, ser_node->period/2, ser_node->period/2);
-//-----------------------------------------------------
 		}
 	} else {
 		return -1;
