@@ -30,7 +30,6 @@ int linber_exit();
 //---------------------------------------------------------------------------------
 int linber_register_service(	char *service_uri,					\
 								unsigned int uri_len,				\
-								int *service_id,					\
 								unsigned int exec_time,				\
 								unsigned int max_workers,			\
 								unsigned long *service_token,		\
@@ -46,7 +45,6 @@ int linber_register_service_worker(	char *service_uri,				\
 
 int linber_start_job_service(	char *service_uri, 								\
 								unsigned int uri_len,							\
-								int service_id, 								\
 								unsigned long service_token,					\
 								unsigned int worker_id,							\
 								char **request, 								\
@@ -56,7 +54,6 @@ int linber_start_job_service(	char *service_uri, 								\
 
 int linber_end_job_service(	char *service_uri, 				\
 							unsigned int uri_len,			\
-							int service_id, 				\
 							unsigned long service_token,	\
 							unsigned int worker_id,			\
 							char *request, 					\
@@ -67,7 +64,6 @@ int linber_end_job_service(	char *service_uri, 				\
 
 int linber_end_job_service_shm(	char *service_uri, 				\
 								unsigned int uri_len,			\
-								int service_id, 				\
 								unsigned long service_token,	\
 								unsigned int worker_id,			\
 								char *request, 					\
@@ -105,7 +101,8 @@ int linber_request_service_no_blocking(	char *service_uri, 				\
 										unsigned int rel_deadline_ms,	\
 										char *request, 					\
 										int request_len,				\
-										unsigned long *ptr_token		\
+										unsigned long *ptr_token,		\
+										unsigned long *abs_deadline		\
 									);
 
 
@@ -124,7 +121,8 @@ int linber_request_service_no_blocking_shm(	char *service_uri, 				\
 											unsigned int rel_deadline_ms,	\
 											key_t request_key, 				\
 											int request_len,				\
-											unsigned long *ptr_token		\
+											unsigned long *ptr_token,		\
+											unsigned long *abs_deadline		\
 										);
 
 int linber_request_service_get_response(	char *service_uri, 					\
@@ -132,7 +130,8 @@ int linber_request_service_get_response(	char *service_uri, 					\
 											char **response, 					\
 											int *response_len,					\
 											boolean *response_shm_mode,			\
-											unsigned long *ptr_token			\
+											unsigned long *ptr_token,			\
+											unsigned long abs_deadline			\
 										);
 
 #endif

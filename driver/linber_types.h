@@ -48,17 +48,19 @@ typedef struct RequestNode{
 	} response;
 }RequestNode;
 
-
 typedef struct worker_struct{
 	struct task_struct *task;				// worker process
 	RequestNode *request;					// array serving requests, size max workers
 }worker_struct;
 
 typedef struct ServiceNode{
-	struct rb_root Requests_rbtree;
+	struct mutex service_mutex;				// to protect the lists and avoid to delete a node while another process is iterating
 	struct list_head list;					// used to implement the list
+	struct rb_root Requests_rbtree;
+	struct list_head Completed_RequestsHead;	// list of completed requests, the client take the request using a token
 	char *uri;								// service uri
 	int id;									// used by idr to find the service without iterating on the list
+	unsigned long next_req_token;
 	unsigned long token;					// security, to check the operations called on a service
 	unsigned int period;					// CBS period
 	unsigned int budget;					// CBS budget
@@ -73,21 +75,15 @@ typedef struct ServiceNode{
 		unsigned int next_id;				// used to identify the worker's slot in the array
 		struct semaphore sem_for_request;	// used to stop the workers when there are no pending requests
 	} Workers;
-
-	struct list_head RequestsHead;
-	struct list_head Completed_RequestsHead;	// list of completed requests, the client take the request using a token
-
-	struct mutex service_mutex;				// to protect the lists and avoid to delete a node while another process is iterating
 }ServiceNode;
 
-
-struct linber_stuct{
+typedef struct linber_struct{
+	struct rb_root Services_rbtree;			// rbtree used to find services by uri
 	struct list_head Services;				// queue list of services
-	struct idr Services_idr;				// idr of services, key:Service id, value: service node address
 	unsigned int Services_count;
 	unsigned int Request_count;				// total number of request between services
 	unsigned int Max_Working;				// maximum number of workers between services
 	struct mutex mutex;						// used to protect the service list in case of deletion during iterating
-} linber;
+}linber_struct;
 
 #endif

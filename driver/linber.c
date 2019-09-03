@@ -27,12 +27,15 @@
 #define CLA_NAME "linberclass"
 
 #define CHECK_MEMORY_ERROR(value) if(value!=0){return LINBER_USER_MEMORY_ERROR;}
-//#define DEBUG_MODULE
 
+//#define DEBUG_MODULE
+#define DEBUG_RT
 
 static int dev_major;
-static struct class*	dev_class	= NULL; ///< The device-driver class struct pointer
-static struct device* dev_device = NULL; ///< The device-driver device struct pointer
+static struct class* 	dev_class	= NULL; ///< The device-driver class struct pointer
+static struct device* 	dev_device = NULL; ///< The device-driver device struct pointer
+
+static struct linber_struct linber;
 
 static int		dev_open(struct inode *n, struct file *f) {
 	try_module_get(THIS_MODULE);
@@ -59,53 +62,34 @@ static inline RequestNode* create_Request(void){
 	req_node = kmalloc(sizeof(*req_node) ,GFP_KERNEL);
 	req_node->request_accepted = false;
 	req_node->result_cmd = LINBER_ABORT_REQUEST;	// if not fixed will be aborted	
-	get_random_bytes(&req_node->token, sizeof(req_node->token));
 	sema_init(&req_node->Request_sem, 0);
 	return req_node;
-}
-
-//------------------------------------------------------
-
-static ServiceNode* findService_by_id(int id){
-	ServiceNode *ser_node = NULL;
-	mutex_lock(&linber.mutex);
-	ser_node = idr_find(&linber.Services_idr, id);
-	mutex_unlock(&linber.mutex);
-	return ser_node;
 }
 
 static ServiceNode* findService(char *uri){
 	ServiceNode *ser_node = NULL;
 	mutex_lock(&linber.mutex);
-	list_for_each_entry(ser_node, &linber.Services, list){
-		if(strcmp(ser_node->uri, uri) == 0){
-			mutex_unlock(&linber.mutex);
-			return ser_node;
-		}
-	}
+	ser_node = get_ServiceNode(&linber.Services_rbtree, uri);
 	mutex_unlock(&linber.mutex);
-	return NULL;
+	return ser_node;
 }
 
-static RequestNode* findWaiting_or_Completed_Request(ServiceNode* ser_node, unsigned long token){
+static RequestNode* find_Waiting_or_Completed_Request(ServiceNode* ser_node, unsigned long abs_deadline_ns, unsigned long token){
 	RequestNode *req_node = NULL, *node = NULL;
 	int i = 0;
 	mutex_lock(&ser_node->service_mutex);
 	// search in waiting
-	list_for_each_entry(node, &linber.Services, list){
-		if(node->token == token){
-			req_node = node;
-			mutex_unlock(&ser_node->service_mutex);
-			return req_node;
-		}
-	}
+	req_node = RBtree_get_request(&ser_node->Requests_rbtree, abs_deadline_ns, token);
+
 	// search in serving
 	if(req_node == NULL){
 		for(i=0; i<ser_node->Workers.Max_Workers; i++){
-			node = ser_node->Workers.worker_slots[i].request;
-			if((node != NULL) && (node->token == token)){
+			req_node = ser_node->Workers.worker_slots[i].request;
+			if((req_node != NULL) && (req_node->token == token)){
 				mutex_unlock(&ser_node->service_mutex);
 				return req_node;
+			} else {
+				req_node = NULL;
 			}
 		}		
 	}
@@ -130,12 +114,15 @@ static inline void destroy_request(RequestNode *req_node){
 
 static inline void clean_service(ServiceNode *ser_node){
 	linber.Services_count--;
+
 	list_del(&ser_node->list);
+	Remove_Service(&linber.Services_rbtree, ser_node->uri);
+
 	kfree(ser_node->uri);
 	linber.Max_Working -= ser_node->Workers.Max_Workers;
 	kfree(ser_node->Workers.worker_slots);
 	mutex_unlock(&ser_node->service_mutex);
-	idr_remove(&linber.Services_idr, ser_node->id);
+
 	kfree(ser_node);	// done by last worker
 }
 
@@ -144,11 +131,11 @@ static void destroy_service(ServiceNode *ser_node){
 	RequestNode *req_node = NULL, *next = NULL;
 	printk(KERN_INFO "linber:: Destroying service %s\n", ser_node->uri);
 	mutex_lock(&ser_node->service_mutex);
-	list_for_each_entry_safe(req_node, next, &ser_node->RequestsHead, list){
-		i++;
-		list_del(&req_node->list);
+
+	while((req_node = Remove_first_request(&ser_node->Requests_rbtree)) != NULL){
 		destroy_request(req_node);
 	}
+
 	linber.Request_count -= i;
 	
 	list_for_each_entry_safe(req_node, next, &ser_node->Completed_RequestsHead, list){
@@ -177,11 +164,11 @@ static ServiceNode * linber_create_service(linber_service_struct *obj){
 	ser_node = kmalloc(sizeof(*ser_node) ,GFP_KERNEL);
 	INIT_LIST_HEAD(&ser_node->Completed_RequestsHead);
 
-	INIT_LIST_HEAD(&ser_node->RequestsHead);
 	ser_node->Requests_rbtree = RB_ROOT;
 
 	mutex_init(&ser_node->service_mutex);
 	get_random_bytes(&ser_node->token, sizeof(ser_node->token));	// 64 bit random token
+	ser_node->next_req_token = 0;
 	ser_node->uri = obj->service_uri;
 	ser_node->Request_count = 0;
 	ser_node->destroy_me = false;
@@ -202,16 +189,13 @@ static ServiceNode * linber_create_service(linber_service_struct *obj){
 
 
 	mutex_lock(&linber.mutex);
-		list_add_tail(&ser_node->list, &linber.Services);
-		id = idr_alloc(&linber.Services_idr, (void*)ser_node, 0, MAX_SERVICES, GFP_KERNEL);
-		if(id < 0){
-			kfree(ser_node);
-			return NULL;
-		}
-		linber.Services_count++;
-		linber.Max_Working += ser_node->Workers.Max_Workers;
+	Insert_ServiceNode(&linber.Services_rbtree, ser_node);
+	list_add_tail(&ser_node->list, &linber.Services);
+
+	linber.Services_count++;
+	linber.Max_Working += ser_node->Workers.Max_Workers;
 	mutex_unlock(&linber.mutex);
-	ser_node->id = id;
+
 	printk(KERN_INFO "linber::  New Service token:%lu %s, workers:%d,  exec time:%d\n", ser_node->token, ser_node->uri, ser_node->Workers.Max_Workers, ser_node->exec_time_ns);
 	return ser_node;
 }
@@ -227,6 +211,7 @@ static RequestNode* enqueue_request_for_service(	ServiceNode *ser_node, 			\
 	RequestNode *req_node;
 	req_node = create_Request();
 	if(req_node != NULL){
+		req_node->token = ser_node->next_req_token++;
 		req_node->abs_deadline_ns = abs_deadline_ns;
 		if(shm_mode){
 			req_node->request_shm_mode = true;
@@ -239,9 +224,6 @@ static RequestNode* enqueue_request_for_service(	ServiceNode *ser_node, 			\
 
 		mutex_lock(&ser_node->service_mutex);
 			Insert_ReqNode_Sorted_by_Deadline(&ser_node->Requests_rbtree, req_node);
-//--------------------------
-//			list_add_tail(&req_node->list, &ser_node->RequestsHead);
-//--------------------------
 			ser_node->Request_count++;
 			req_node->request_accepted = true;
 		mutex_unlock(&ser_node->service_mutex);
@@ -252,12 +234,6 @@ static RequestNode* enqueue_request_for_service(	ServiceNode *ser_node, 			\
 		}
 	}
 	return req_node;
-}
-
-static void enqueue_request_completed(ServiceNode *ser_node, RequestNode *req_node){	
-	mutex_lock(&ser_node->service_mutex);
-		list_add_tail(&req_node->list, &ser_node->Completed_RequestsHead);
-	mutex_unlock(&ser_node->service_mutex);
 }
 
 static RequestNode* get_Completed_Request(ServiceNode *ser_node, unsigned long token){
@@ -275,20 +251,16 @@ static RequestNode* get_Completed_Request(ServiceNode *ser_node, unsigned long t
 
 static RequestNode* get_request(ServiceNode* ser_node){
 	RequestNode* req_node = NULL;
-	mutex_lock(&ser_node->service_mutex);
-		req_node = get_first_request(&ser_node->Requests_rbtree);
-		if(req_node != NULL){
-			ser_node->Request_count--;
-			if(!req_node->request_accepted){
-				kfree(req_node->request.data);
-				kfree(req_node->response.data);
-				kfree(req_node);
-				mutex_unlock(&ser_node->service_mutex);
-				return NULL;
-			}
+	req_node = Remove_first_request(&ser_node->Requests_rbtree);
+	if(req_node != NULL){
+		ser_node->Request_count--;
+		if(!req_node->request_accepted){
+			kfree(req_node->request.data);
+			kfree(req_node->response.data);
+			kfree(req_node);
+			return NULL;
 		}
-	mutex_unlock(&ser_node->service_mutex);
-	if(req_node == NULL){
+	} else {
 		printk(KERN_INFO "linber::  No pending request for service: %s\n", ser_node->uri);
 	}
 	return req_node;
@@ -356,26 +328,41 @@ static RequestNode* worker_wait_for_request(ServiceNode *ser_node, unsigned int 
 	down_interruptible(&ser_node->Workers.sem_for_request);		// wait for request
 
 	if(Service_check_alive(ser_node) >= 0){
+		mutex_lock(&ser_node->service_mutex);
 		req_node = get_request(ser_node);
 		if(req_node != NULL){
 			worker->request = req_node;
 		}
+		mutex_unlock(&ser_node->service_mutex);
 	}
 	return req_node;
 }
 
-static RequestNode* worker_get_request(ServiceNode *ser_node,unsigned int worker_id){
+static RequestNode* worker_get_request(ServiceNode *ser_node, unsigned int worker_id){
 	RequestNode *req_node = NULL;
 	worker_struct *worker = NULL;
 	worker = get_worker_by_id(ser_node, worker_id);
 	if(worker != NULL){
 		req_node = worker->request;
-		worker->request = NULL;
 	}
 	return req_node;
 }
 
-
+static void move_from_worker_to_completed(ServiceNode *ser_node, unsigned int worker_id){	
+	RequestNode *req_node = NULL;
+	worker_struct *worker = NULL;
+	mutex_lock(&ser_node->service_mutex);
+		worker = get_worker_by_id(ser_node, worker_id);
+		if(worker != NULL){
+			req_node = worker->request;
+			worker->request = NULL;
+			if(req_node != NULL){
+				list_add_tail(&req_node->list, &ser_node->Completed_RequestsHead);
+			}
+		}
+	mutex_unlock(&ser_node->service_mutex);
+	up(&req_node->Request_sem);	// end job
+}
 //------------------------------------------------------
 static int linber_register_service(linber_service_struct *obj){
 	ServiceNode *ser_node;
@@ -386,7 +373,6 @@ static int linber_register_service(linber_service_struct *obj){
 			return LINBER_SERVICE_REGISTRATION_FAIL;
 		}
 		CHECK_MEMORY_ERROR(put_user(ser_node->token, obj->op_params.registration.ptr_service_token));
-		CHECK_MEMORY_ERROR(put_user(ser_node->id, obj->op_params.registration.ptr_service_id));
 		return LINBER_SERVICE_REGISTRATION_SUCCESS;
 	} else {
 		return LINBER_SERVICE_REGISTRATION_ALREADY_EXISTS;
@@ -415,6 +401,7 @@ static int linber_request_service(linber_service_struct *obj){
 			abs_deadline_ns = obj->op_params.request.abs_deadline_ns;
 			if(!shm_mode){
 				if(request_len > LINBER_MAX_MEM_SIZE){
+printk(KERN_INFO "check 1\n");
 					return LINBER_PAYLOAD_SIZE_ERROR;
 				}
 				request = kmalloc(request_len, GFP_KERNEL);
@@ -424,6 +411,7 @@ static int linber_request_service(linber_service_struct *obj){
 			}
 			req_node = enqueue_request_for_service(ser_node, request, request_len, blocking, shm_mode, request_key, abs_deadline_ns);
 			if(req_node == NULL){
+printk(KERN_INFO "check 2\n");
 				return LINBER_REQUEST_FAILED;
 			}
 			CHECK_MEMORY_ERROR(put_user(req_node->token, obj->op_params.request.ptr_token));
@@ -434,9 +422,11 @@ static int linber_request_service(linber_service_struct *obj){
 		}
 		//----------------------waiting-----------------------
 		if(status == LINBER_REQUEST_WAITING){
+			abs_deadline_ns = obj->op_params.request.abs_deadline_ns;
 			CHECK_MEMORY_ERROR(get_user(token, obj->op_params.request.ptr_token));
-			req_node = findWaiting_or_Completed_Request(ser_node, token);
+			req_node = find_Waiting_or_Completed_Request(ser_node, abs_deadline_ns, token);
 			if(req_node == NULL){
+printk(KERN_INFO "check 4\n");
 				return LINBER_REQUEST_FAILED;
 			}
 			down(&req_node->Request_sem);
@@ -454,6 +444,7 @@ static int linber_request_service(linber_service_struct *obj){
 		}
 	} else {
 		ret = LINBER_SERVICE_NOT_EXISTS;
+printk(KERN_INFO "check 5\n");
 	}
 	return ret;
 }
@@ -481,9 +472,11 @@ static int linber_request_service_get_response(linber_service_struct *obj){
 			}
 			kfree(req_node);
 		} else {
+printk(KERN_INFO "check 6\n");
 			ret = LINBER_REQUEST_FAILED;
 		}
 	} else {
+printk(KERN_INFO "check 7\n");
 		ret = LINBER_SERVICE_NOT_EXISTS;
 	}
 	return ret;
@@ -526,7 +519,7 @@ static int Dispatch_as_RealTime(unsigned long exec_time_ns, unsigned long period
 	if (res < 0){
 		printk(KERN_INFO "Linber:: SCHED_DEADLINE FAULT %i with Q:%lu P:%lu D:%lu\n", res, exec_time_ns/1000000, period_ns/1000000, rel_deadline_ns/1000000);
 	} else {
-		#ifdef DEBUG_MODULE
+		#ifdef DEBUG_RT
 			printk(KERN_INFO "Linber:: Dispatched as RealTime Q:%lu P:%lu D:%lu\n", exec_time_ns/1000000, period_ns/1000000, rel_deadline_ns/1000000);
 		#endif
 	}
@@ -550,7 +543,7 @@ static int linber_register_service_worker(linber_service_struct *obj){
 			ser_node->Workers.worker_slots[worker_id].task = current;
 			CHECK_MEMORY_ERROR(put_user(worker_id, obj->op_params.register_worker.ptr_worker_id));
 //-----------------------------------------------------
-// I don't know why but this is required
+// I don't know why but this is necessary or the next requests for SCHED_DEADLINE will return EINVAL
 			Dispatch_as_RealTime(ser_node->budget, ser_node->period/2, ser_node->period/2);
 //-----------------------------------------------------
 		}
@@ -562,7 +555,7 @@ static int linber_register_service_worker(linber_service_struct *obj){
 
 static int linber_Start_Job(linber_service_struct *obj){
 	RequestNode *req_node = NULL;
-	ServiceNode *ser_node = findService_by_id(obj->op_params.start_job.service_id);
+	ServiceNode *ser_node = findService(obj->service_uri);
 	int rel_deadline_ns;
 	unsigned int worker_id;
 	unsigned long service_token;
@@ -587,7 +580,9 @@ static int linber_Start_Job(linber_service_struct *obj){
 				now = ktime_get();		// CLOCK_MONOTONIC, since boot without considering suspend
 				rel_deadline_ns = (req_node->abs_deadline_ns - ktime_to_ns(now)); // abs_deadline - now
 				if(rel_deadline_ns <= 0){
+					#ifdef DEBUG_RT
 					printk(KERN_INFO "Linber:: request expired rel: %i abs:%lu\n", rel_deadline_ns, req_node->abs_deadline_ns);
+					#endif
 					Dispatch_as_BestEffort();
 				} else {
 					rel_deadline_ns = (rel_deadline_ns > ser_node->period)?ser_node->period:rel_deadline_ns;
@@ -611,7 +606,8 @@ static int linber_Start_Job(linber_service_struct *obj){
 static int linber_Start_Job_get_request(linber_service_struct *obj){
 	worker_struct *worker;
 	RequestNode *req_node;
-	ServiceNode *ser_node = findService_by_id(obj->op_params.start_job.service_id);
+	ServiceNode *ser_node = findService(obj->service_uri);
+
 	unsigned int worker_id;
 	unsigned long service_token;
 	if(ser_node != NULL){
@@ -645,7 +641,8 @@ static int linber_End_Job(linber_service_struct *obj){
 	int worker_id;
 	unsigned long service_token;
 	RequestNode *req_node;
-	ServiceNode *ser_node = findService_by_id(obj->op_params.end_job.service_id);
+	ServiceNode *ser_node = findService(obj->service_uri);
+	int ret = 0;
 
 	if(ser_node != NULL){
 		worker_id = obj->op_params.end_job.worker_id;
@@ -663,22 +660,20 @@ static int linber_End_Job(linber_service_struct *obj){
 				} else {
 					if((req_node->response_len > LINBER_MAX_MEM_SIZE)){
 						req_node->result_cmd = LINBER_REQUEST_FAILED;
-						enqueue_request_completed(ser_node, req_node);
-						up(&req_node->Request_sem);	// end job
-						return LINBER_PAYLOAD_SIZE_ERROR;
+						ret = LINBER_PAYLOAD_SIZE_ERROR;
+					} else {
+						req_node->response.data = kmalloc(req_node->response_len, GFP_KERNEL);
+						CHECK_MEMORY_ERROR(copy_from_user(req_node->response.data, obj->op_params.end_job.response.data, req_node->response_len));
 					}
-					req_node->response.data = kmalloc(req_node->response_len, GFP_KERNEL);
-					CHECK_MEMORY_ERROR(copy_from_user(req_node->response.data, obj->op_params.end_job.response.data, req_node->response_len));
 				}
 				req_node->result_cmd = LINBER_REQUEST_SUCCESS;
-				enqueue_request_completed(ser_node, req_node);
-				up(&req_node->Request_sem);	// end job
+				move_from_worker_to_completed(ser_node, worker_id);
 			} else {
 				return LINBER_SERVICE_SKIP_JOB;
 			}
 		}
 	}
-	return 0;
+	return ret;
 }
 
 static int linber_destroy_service(linber_service_struct *obj){
@@ -699,7 +694,6 @@ static int linber_get_system_status(void* system_user){
 	ServiceNode *ser_node;
 	ServiceNode ser_node_cpy;
 	int i = 0;
-
 	CHECK_MEMORY_ERROR(copy_from_user(&system, system_user, sizeof(system_status)));
 	system.Max_Working = linber.Max_Working;
 	system.services_count = linber.Services_count;
@@ -836,8 +830,9 @@ int init_module(void) {
 		return PTR_ERR(dev_device);
 	}
 
+	linber.Services_rbtree = RB_ROOT;
 	INIT_LIST_HEAD(&linber.Services);
-	idr_init(&linber.Services_idr);
+
 	linber.Request_count = 0;
 	linber.Max_Working = 0;
 	mutex_init(&linber.mutex);
@@ -848,12 +843,11 @@ int init_module(void) {
 void cleanup_module(void) {
 	ServiceNode *ser_node, *next;
 
+	while((ser_node = Remove_first_Service(&linber.Services_rbtree)) != NULL);
 	list_for_each_entry_safe(ser_node, next, &linber.Services, list){
 		list_del(&ser_node->list);
 		destroy_service(ser_node);
 	}
-
-	idr_destroy(&linber.Services_idr);
 
 	printk(KERN_INFO "linber:: Destroying device %s\n", CLA_NAME);
 	device_destroy(dev_class, MKDEV(dev_major, 0));

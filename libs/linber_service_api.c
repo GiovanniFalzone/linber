@@ -58,7 +58,6 @@ int ioctl_send(unsigned int cmd, void* param){
 //------------------------------------------------
 int linber_register_service(	char *service_uri,					\
 								unsigned int uri_len,				\
-								int *service_id,					\
 								unsigned int exec_time,				\
 								unsigned int max_workers,			\
 								unsigned long *service_token,		\
@@ -70,7 +69,6 @@ int linber_register_service(	char *service_uri,					\
 	param.service_uri = service_uri;
 	param.service_uri_len = uri_len;
 	param.op_params.registration.Max_Working = max_workers;
-	param.op_params.registration.ptr_service_id = service_id;
 	param.op_params.registration.ptr_service_token = service_token;
 
 	param.op_params.registration.exec_time_ns = mSEC_TO_nSEX(exec_time);
@@ -387,7 +385,8 @@ int linber_request_service_no_blocking(	char *service_uri, 				\
 										unsigned int rel_deadline_ms,	\
 										char *request, 					\
 										int request_len,				\
-										unsigned long *ptr_token		\
+										unsigned long *ptr_token,		\
+										unsigned long *abs_deadline		\
 									){
 	int ret = 0;
 	linber_service_struct param;
@@ -404,12 +403,13 @@ int linber_request_service_no_blocking(	char *service_uri, 				\
 	param.service_uri_len = uri_len;
 
 	if(rel_deadline_ms == 0){
-		param.op_params.request.abs_deadline_ns = -1; // -1 for an unsigned is converted to the maximum value
+		*abs_deadline = -1; // -1 for an unsigned is converted to the maximum value
 	} else {
-		param.op_params.request.abs_deadline_ns = SEC_TO_nSEC(now.tv_sec);
-		param.op_params.request.abs_deadline_ns += now.tv_nsec;
-		param.op_params.request.abs_deadline_ns += mSEC_TO_nSEX(rel_deadline_ms);;
+		*abs_deadline = SEC_TO_nSEC(now.tv_sec);
+		*abs_deadline += now.tv_nsec;
+		*abs_deadline += mSEC_TO_nSEX(rel_deadline_ms);;
 	}
+	param.op_params.request.abs_deadline_ns = *abs_deadline;
 
 	param.op_params.request.ptr_token = ptr_token;
 	param.op_params.request.status = LINBER_REQUEST_INIT;
@@ -431,7 +431,8 @@ int linber_request_service_no_blocking_shm(	char *service_uri, 				\
 											unsigned int rel_deadline_ms,	\
 											key_t request_key, 				\
 											int request_len,				\
-											unsigned long *ptr_token		\
+											unsigned long *ptr_token,		\
+											unsigned long *abs_deadline		\
 										){
 	int ret = 0;
 	linber_service_struct param;
@@ -448,12 +449,13 @@ int linber_request_service_no_blocking_shm(	char *service_uri, 				\
 	param.service_uri_len = uri_len;
 
 	if(rel_deadline_ms == 0){
-		param.op_params.request.abs_deadline_ns = -1; // -1 for an unsigned is converted to the maximum value
+		*abs_deadline = -1; // -1 for an unsigned is converted to the maximum value
 	} else {
-		param.op_params.request.abs_deadline_ns = SEC_TO_nSEC(now.tv_sec);
-		param.op_params.request.abs_deadline_ns += now.tv_nsec;
-		param.op_params.request.abs_deadline_ns += mSEC_TO_nSEX(rel_deadline_ms);;
+		*abs_deadline = SEC_TO_nSEC(now.tv_sec);
+		*abs_deadline += now.tv_nsec;
+		*abs_deadline += mSEC_TO_nSEX(rel_deadline_ms);;
 	}
+	param.op_params.request.abs_deadline_ns = *abs_deadline;
 
 
 	param.op_params.request.ptr_token = ptr_token;
@@ -477,7 +479,8 @@ int linber_request_service_get_response(	char *service_uri, 					\
 											char **response, 					\
 											int *response_len,					\
 											boolean *response_shm_mode,			\
-											unsigned long *ptr_token			\
+											unsigned long *ptr_token,			\
+											unsigned long abs_deadline			\
 										){
 	int ret = 0, response_shm_id;
 	linber_service_struct param;
@@ -486,6 +489,7 @@ int linber_request_service_get_response(	char *service_uri, 					\
 	param.service_uri = service_uri;
 	param.service_uri_len = uri_len;
 	param.op_params.request.ptr_token = ptr_token;
+	param.op_params.request.abs_deadline_ns = abs_deadline;
 	param.op_params.request.status = LINBER_REQUEST_WAITING;
 
 	param.op_params.request.ptr_response_len = response_len;
@@ -541,7 +545,6 @@ void linber_request_service_clean(char *request, boolean shm_request_mode, char 
 //-----------------------------------------------------------------------
 int linber_start_job_service(	char *service_uri, 								\
 								unsigned int uri_len,							\
-								int service_id, 								\
 								unsigned long service_token,					\
 								unsigned int worker_id,							\
 								char **request, 								\
@@ -554,7 +557,6 @@ int linber_start_job_service(	char *service_uri, 								\
 
 	param.service_uri = service_uri;
 	param.service_uri_len = uri_len;
-	param.op_params.start_job.service_id = service_id;
 	param.op_params.start_job.worker_id = worker_id;
 	param.op_params.start_job.service_token = service_token;
 	param.op_params.start_job.ptr_request_len = request_len;
@@ -596,7 +598,6 @@ int linber_start_job_service(	char *service_uri, 								\
 
 int linber_end_job_service(	char *service_uri, 				\
 							unsigned int uri_len,			\
-							int service_id, 				\
 							unsigned long service_token,	\
 							unsigned int worker_id,			\
 							char *request, 					\
@@ -609,7 +610,6 @@ int linber_end_job_service(	char *service_uri, 				\
 
 	param.service_uri = service_uri;
 	param.service_uri_len = uri_len;
-	param.op_params.end_job.service_id = service_id;
 	param.op_params.end_job.worker_id = worker_id;
 	param.op_params.end_job.service_token = service_token;
 	param.op_params.end_job.response_len = response_len;
@@ -641,7 +641,6 @@ int linber_end_job_service(	char *service_uri, 				\
 
 int linber_end_job_service_shm(	char *service_uri, 				\
 								unsigned int uri_len,			\
-								int service_id, 				\
 								unsigned long service_token,	\
 								unsigned int worker_id,			\
 								char *request, 					\
@@ -655,7 +654,6 @@ int linber_end_job_service_shm(	char *service_uri, 				\
 
 	param.service_uri = service_uri;
 	param.service_uri_len = uri_len;
-	param.op_params.end_job.service_id = service_id;
 	param.op_params.end_job.worker_id = worker_id;
 	param.op_params.end_job.service_token = service_token;
 	param.op_params.end_job.response_len = response_len;

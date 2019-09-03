@@ -10,7 +10,6 @@
 class linberServiceWorker {
 	char *service_uri;
 	char *file_str;
-	int service_id;
 	int uri_len;
 	unsigned long service_token;
 	unsigned int exec_time;
@@ -27,8 +26,7 @@ protected:
 		int response_len;
 
 public:
-	linberServiceWorker(char * service_uri, int service_id, unsigned long service_token){
-		this->service_id = service_id;
+	linberServiceWorker(char * service_uri, unsigned long service_token){
 		this->service_token = service_token;
 		this->uri_len = strlen(service_uri) + 1;
 		this->service_uri = (char*)malloc(this->uri_len+1);
@@ -70,10 +68,14 @@ public:
 		}
 		while(worker_alive){
 			request_shm_mode = false;
-			ret = linber_start_job_service(	service_uri, uri_len,				\
-											service_id, service_token,			\
-											worker_id,							\
-											&request, &request_len, &request_shm_mode);
+			ret = linber_start_job_service(	service_uri,		\
+											uri_len,			\
+											service_token,		\
+											worker_id,			\
+											&request,			\
+											&request_len,		\
+											&request_shm_mode	\
+											);
 
 			if(ret < 0){
 				break;
@@ -85,11 +87,15 @@ public:
 
 				execute_job();
 
-				ret = linber_end_job_service(	service_uri, uri_len,				\
-												service_id, service_token,			\
-												worker_id,							\
-												request, request_shm_mode,			\
-												response, response_len);
+				ret = linber_end_job_service(	service_uri,			\
+												uri_len,				\
+												service_token,			\
+												worker_id,				\
+												request,				\
+												request_shm_mode,		\
+												response,				\
+												response_len			\
+											);
 			}
 		}
 		printf("Worker %d died\n", worker_id);

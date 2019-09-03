@@ -64,7 +64,6 @@ typedef struct linber_service_struct {
 	union op_params{
 		struct registration {
 			unsigned int Max_Working;
-			int *ptr_service_id;
 			unsigned long *ptr_service_token;
 			unsigned long exec_time_ns;
 			unsigned int service_period_ns;
@@ -98,7 +97,6 @@ typedef struct linber_service_struct {
 		} request;
 
 		struct start_job{
-			int service_id;
 			unsigned int worker_id;	// start job
 			unsigned long service_token;
 			int *ptr_request_len;
@@ -110,7 +108,6 @@ typedef struct linber_service_struct {
 		} start_job;
 
 		struct end_job{
-			int service_id;
 			unsigned int worker_id;
 			unsigned long service_token;
 			int response_len;
