@@ -68,6 +68,8 @@ public:
 		}
 		while(worker_alive){
 			request_shm_mode = false;
+			response = NULL;
+			request = NULL;
 			ret = linber_start_job_service(	service_uri,		\
 											uri_len,			\
 											service_token,		\

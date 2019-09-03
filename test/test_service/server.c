@@ -52,6 +52,8 @@ void *thread_job(void *args){
 		printf("started_thread id:%d, service:%s\n", worker_id, service_uri);
 		while(Abort_and_Exit == 0){
 			request_shm_mode = FALSE;
+			response = NULL;
+			request = NULL;
 			ret = linber_start_job_service(	service_uri, uri_len,		\
 											worker.service_token,		\
 											worker_id,					\
