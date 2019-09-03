@@ -9,7 +9,7 @@
 #define DEFAULT_SERVICE_URI	"org.service\0"
 
 #define ITERATION_FOR_MIN	1000
-#define MAX_SIZE			1<<20
+#define MAX_SIZE			1<<30
 
 char *service_uri;
 int uri_len;
