@@ -15,8 +15,8 @@ class calculator_service : public linberServiceWorker{
 	Calculator::Calculator_response response_msg;
 
 	public:
-	calculator_service(char * service_uri, int service_id, unsigned long service_token)	\
-					 : linberServiceWorker(service_uri, service_id, service_token){
+	calculator_service(char * service_uri, unsigned long service_token)	\
+					 : linberServiceWorker(service_uri, service_token){
 	}
 
 	float sum(float a, float b){
@@ -111,18 +111,17 @@ void sig_handler(int signo){
 }
 
 int main(){
-	int service_id;
 	if(signal(SIGINT, sig_handler) == SIG_ERR){
 		printf("can't catch SIGINT\n");
 		return -1;
 	}
 
 	linber_init();
-	linber_register_service(str_uri, uri_len, &service_id, job_exec_time, num_workers, &service_token, Service_period, Service_RPP);
+	linber_register_service(str_uri, uri_len, job_exec_time, num_workers, &service_token, Service_period, Service_RPP);
 
 	calculator_workers = (calculator_service**)malloc(sizeof(calculator_service*)*num_workers);
 	for(int i=0; i<num_workers; i++){
-		calculator_workers[i] = new calculator_service(str_uri, service_id, service_token);
+		calculator_workers[i] = new calculator_service(str_uri, service_token);
 	}
 	for(int i=0; i<num_workers; i++){
 		calculator_workers[i]->join_worker();

@@ -52,7 +52,7 @@ int get_service_time(unsigned int req_size, unsigned int *min_nsec, unsigned int
 		}
 		linber_request_service_clean(request, FALSE, response, response_shm_mode);
 
-		passed_nanos = SEC_TO_nSEC(end.tv_sec - start.tv_sec);
+		passed_nanos = SEC_TO_nSEC(end.tv_sec) - SEC_TO_nSEC(start.tv_sec);
 		passed_nanos += (end.tv_nsec - start.tv_nsec);
 
 		avg_nanos += passed_nanos;
@@ -108,7 +108,7 @@ int main(int argc,char* argv[]){
 			min_size = n;
 		}
 	}
-	if(argc >= 4){		// HOW MANY TIMES TO MULTIPLY MIN SIZE BY 2
+	if(argc >= 4){		// HOW MANY TIMES MULTIPLY MIN SIZE BY 2
 		int n = atoi(argv[3]);
 		if(n > 0){
 			iterations = n;

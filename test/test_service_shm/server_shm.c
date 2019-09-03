@@ -17,7 +17,6 @@
 
 char *service_uri;
 int uri_len;
-int service_id;
 unsigned long service_token;
 int Max_Working = DEFAULT_MAX_CONCURRENT_WORKERS;
 int Abort_and_Exit = 0;
@@ -55,10 +54,14 @@ void *thread_job(void *args){
 		printf("started_thread id:%d, service:%s\n", worker_id, service_uri);
 		while(Abort_and_Exit == 0){
 			request_shm_mode = FALSE;
-			ret = linber_start_job_service(	service_uri, uri_len,				\
-											service_id, worker.service_token,	\
+			ret = linber_start_job_service(	service_uri,			\
+											uri_len,				\
+											worker.service_token,	\
 											worker_id,				\
-											&request, &request_len, &request_shm_mode);
+											&request,				\
+											&request_len,			\
+											&request_shm_mode		\
+											);
 			if(ret < 0){
 				break;
 			}
@@ -84,11 +87,16 @@ void *thread_job(void *args){
 					passed_millis = (end.tv_usec - start.tv_usec)*0.001;
 				} while(passed_millis < worker.exec_time);
 
-				ret = linber_end_job_service_shm(	service_uri, uri_len,				\
-													service_id, worker.service_token,	\
-													worker_id,					\
-													request, request_shm_mode,			\
-													response, response_len, response_key);
+				ret = linber_end_job_service_shm(	service_uri,			\
+													uri_len,				\
+													worker.service_token,	\
+													worker_id,				\
+													request,				\
+													request_shm_mode,		\
+													response,				\
+													response_len,			\
+													response_key			\
+												);
 			}
 		}
 	}
@@ -143,8 +151,8 @@ int main(int argc,char* argv[]){
 	printf("Running Service Server %s with %d workers, job exec time:%d\n", service_uri, Max_Working, job_exec_time);
 
 	linber_init();
-	linber_register_service(service_uri, uri_len, &service_id, job_exec_time, Max_Working, &service_token, Service_period, Service_RPP);
-	printf("registered service, id:%i, starting thread pool\n", service_id);
+	linber_register_service(service_uri, uri_len, job_exec_time, Max_Working, &service_token, Service_period, Service_RPP);
+	printf("registered service, starting thread pool\n");
 	int workers_num = Max_Working;
 	thread_info worker[workers_num];
 	for(int i=0; i<workers_num; i++){

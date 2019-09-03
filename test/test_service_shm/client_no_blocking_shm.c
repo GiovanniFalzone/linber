@@ -13,7 +13,7 @@
 #define DEFAULT_CONCURRENT_REQUESTS	16
 #define DEFAULT_MAX_INTER_PERIOD	0
 #define DEFAULT_REL_DEADLINE		0	// 0 for best effort
-#define TIME_BEFORE_RESPONSE		1	// waiting time before asking for the response
+#define DEFAULT_WAIT_BEFORE_RESPONSE_us		100*1000	// waiting time before asking for the response
 
 int abort_request = 0;
 char *service_uri = DEFAULT_SERVICE_URI;
@@ -21,6 +21,7 @@ int uri_len = sizeof(DEFAULT_SERVICE_URI);
 int concurrent_requests = DEFAULT_CONCURRENT_REQUESTS;
 int max_inter_request = DEFAULT_MAX_INTER_PERIOD;
 int max_rel_Deadline_ms = DEFAULT_REL_DEADLINE;
+int wait_before_response_us = DEFAULT_WAIT_BEFORE_RESPONSE_us;
 
 void sig_handler(int signo){
   if (signo == SIGINT){
@@ -40,7 +41,7 @@ void *thread_job(void *args){
 	struct timeval start, end;
 	unsigned long passed_millis = 0;
 	int ret = 0;
-	unsigned long token;
+	unsigned long token, abs_deadline;
 	int request_len;
 	char *request;
 	key_t request_shm_key;
@@ -65,13 +66,13 @@ void *thread_job(void *args){
 		printf("sending NON Blocking request id:%d, service:%s\n", worker.id, service_uri);
 		ret = linber_request_service_no_blocking_shm(	service_uri, uri_len,									\
 														worker.rel_deadline_ms, request_shm_key, request_len,	\
-														&token);
+														&token, &abs_deadline);
 		if(ret >= 0){
-			sleep(TIME_BEFORE_RESPONSE);
+			usleep(wait_before_response_us);
 			printf("Asking for response request id:%d, service:%s\n", worker.id, service_uri);
 			ret = linber_request_service_get_response(	service_uri, uri_len,							\
 														&response, &response_len, &response_shm_mode,	\
-														&token);
+														&token, abs_deadline);
 		}
 		if(ret < 0){
 			printf("request aborted\n");
@@ -112,6 +113,12 @@ int main(int argc,char* argv[]){
 		n = atoi(argv[4]);
 		if(n >= 0){
 			max_rel_Deadline_ms = n;
+		}
+	}
+	if(argc >= 6){		// WAIT_BEFORE_RESPONSE
+		n = atoi(argv[5]);
+		if(n >= 0){
+			wait_before_response_us = n * 1000;
 		}
 	}
 

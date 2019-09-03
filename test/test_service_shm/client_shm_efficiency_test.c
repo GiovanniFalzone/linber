@@ -58,7 +58,7 @@ int get_service_time(unsigned int req_size, unsigned int *min_nsec, unsigned int
 		}
 		linber_request_service_clean(request, TRUE, response, response_shm_mode);
 
-		passed_nanos = SEC_TO_nSEC(end.tv_sec - start.tv_sec);
+		passed_nanos = SEC_TO_nSEC(end.tv_sec) - SEC_TO_nSEC(start.tv_sec);
 		passed_nanos += (end.tv_nsec - start.tv_nsec);
 
 		avg_nanos += passed_nanos;
