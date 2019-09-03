@@ -28,8 +28,8 @@
 #define CHECK_MEMORY_ERROR(value) if((value)!=0){return LINBER_USER_MEMORY_ERROR;}
 #define CHECK_KMALLOC_ERROR(value) if((value) == NULL){return LINBER_KERNEL_MEMORY_ERROR;}
 
-#define DEBUG_MODULE
-#define DEBUG_RT
+//#define DEBUG_MODULE
+//#define DEBUG_RT
 
 static int dev_major;
 static struct class* 	dev_class	= NULL; ///< The device-driver class struct pointer
