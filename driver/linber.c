@@ -499,9 +499,9 @@ static void Dispatch_as_BestEffort(void){
 	struct sched_attr attr;
 	attr.size = sizeof(struct sched_attr);
 	attr.sched_flags = SCHED_FLAG_RESET_ON_FORK;
-	attr.sched_policy = SCHED_FIFO;
-	attr.sched_nice = 0;
-	attr.sched_priority = 99;
+	attr.sched_policy = SCHED_FIFO;		// SCHED_NORMAL
+	attr.sched_nice = 0;				// -20
+	attr.sched_priority = 99;			// 0
 	attr.sched_runtime = 0;
 	attr.sched_period = attr.sched_deadline = 0;
 	res = sched_setattr(current, &attr);
