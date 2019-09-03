@@ -86,17 +86,18 @@ public:
 				#endif
 
 				execute_job();
-
-				ret = linber_end_job_service(	service_uri,			\
-												uri_len,				\
-												service_token,			\
-												worker_id,				\
-												request,				\
-												request_shm_mode,		\
-												response,				\
-												response_len			\
-											);
 			}
+
+// always execute end job, also if it is a spurious job, needed to free the request memory
+			ret = linber_end_job_service(	service_uri,			\
+											uri_len,				\
+											service_token,			\
+											worker_id,				\
+											request,				\
+											request_shm_mode,		\
+											response,				\
+											response_len			\
+										);
 		}
 		printf("Worker %d died\n", worker_id);
 	}

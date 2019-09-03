@@ -1,4 +1,3 @@
-#include <time.h>
 #include "linber_service_api.h"
 
 int linber_fd = -1;
@@ -140,8 +139,21 @@ void linber_destroy_worker(char *file_str){
 
 //------------------------------------------------------
 char *create_shm_from_key(key_t key, int len, int *id){
+//	struct shmid_ds shmid_ds;
 	char* shm;
-	if((*id = shmget(key, len, IPC_CREAT | 0666)) < 0) {
+	if((*id = shmget(key, len, IPC_CREAT | 0666)) >= 0) {
+/*
+	I can set the permission to the user that will use the shared memory.
+	Passing the uid and gid of the Destination user
+	Service's workers are running as root so no problem
+	Users instead must pass the uid and gid using the request
+	or I have to change them inside the kernel
+*/
+//		shmid_ds.shm_perm.uid
+//		shmid_ds.shm_perm.gid
+//		shmid_ds.shm_perm.mode = 0660;
+//		shmctl(*id, IPC_SET, &shmid_ds);
+} else {
 		printf("shmget error %d\n", *id);
 		switch(*id){
 			case -EACCES:
@@ -283,7 +295,6 @@ int linber_request_service(	char *service_uri,				\
 				return LINBER_REQUEST_FAILED;				
 			}
 			shmctl(response_shm_id, IPC_RMID, NULL);	// self destroy
-
 		} else {
 			*response = (char*)malloc(*response_len);
 			if(response != NULL){
@@ -530,12 +541,18 @@ int linber_request_service_get_response(	char *service_uri, 					\
 
 void linber_request_service_clean(char *request, boolean shm_request_mode, char *response, boolean shm_response_mode ){
 	if(shm_request_mode){
+		#ifdef DEBUG
+			printf("request in shared memory detached\n");
+		#endif
 		detach_shm(request);
 	} else {
 		free(request);
 	}
 
 	if(shm_response_mode){
+		#ifdef DEBUG
+			printf("response in shared memory detached\n");
+		#endif
 		detach_shm(response);
 	} else {
 		free(response);

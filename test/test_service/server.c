@@ -77,16 +77,17 @@ void *thread_job(void *args){
 					memcpy(response, request, response_len);
 					printf("response: %s\n", response);
 				#endif
-
-				ret = linber_end_job_service(	service_uri, uri_len,		\
-												worker.service_token,		\
-												worker_id,					\
-												request,					\
-												request_shm_mode,			\
-												response,					\
-												response_len				\
-											);
 			}
+
+// always execute end job, also if it is a spurious job, needed to free the request memory
+			ret = linber_end_job_service(	service_uri, uri_len,		\
+											worker.service_token,		\
+											worker_id,					\
+											request,					\
+											request_shm_mode,			\
+											response,					\
+											response_len				\
+										);
 		}
 	}
 	linber_destroy_worker(file_str);

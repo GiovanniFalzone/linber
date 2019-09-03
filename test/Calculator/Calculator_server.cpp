@@ -8,6 +8,11 @@
 #include "Calculator.pb.h"
 #include "../../libs/linberServiceWorker.h"
 
+#define REQUEST_EXEC_TIME		2
+#define SERVICE_PERIOD			100
+#define SERVICE_RPP				2		// Request Per Period
+
+
 using namespace std;
 
 class calculator_service : public linberServiceWorker{
@@ -95,10 +100,6 @@ char *str_uri = "org.calculator\0";
 int uri_len = strlen(str_uri);
 unsigned long service_token;
 int num_workers = 3;
-int job_exec_time = 2;
-int Service_period = 100;
-int Service_RPP = 2;
-
 
 void sig_handler(int signo){
   if (signo == SIGINT){
@@ -117,7 +118,7 @@ int main(){
 	}
 
 	linber_init();
-	linber_register_service(str_uri, uri_len, job_exec_time, num_workers, &service_token, Service_period, Service_RPP);
+	linber_register_service(str_uri, uri_len, REQUEST_EXEC_TIME, num_workers, &service_token, SERVICE_PERIOD, SERVICE_RPP);
 
 	calculator_workers = (calculator_service**)malloc(sizeof(calculator_service*)*num_workers);
 	for(int i=0; i<num_workers; i++){

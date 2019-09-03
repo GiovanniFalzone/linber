@@ -17,8 +17,9 @@ class linberClient {
 	key_t request_shm_key;
 	boolean response_shm_mode = FALSE;
 	boolean request_shm_mode = FALSE;
-	unsigned long token;
+	unsigned long token, abs_deadline;
 	int request_state = 0, request_shm_state = -1;
+	int rel_deadline;
 
 	public:
 	linberClient(char * service_uri, int service_uri_len){
@@ -31,23 +32,35 @@ class linberClient {
 		linber_exit();
 	}
 
-	void linber_sendRequest(char *req, int req_len, char **res, int *res_len, bool blocking){
+	void linber_sendRequest(char *req, int req_len, char **res, int *res_len, bool blocking, int rel_deadline){
 		int ret;
 		if((request_state == 0) && (request_shm_state == -1)){
 			this->request_shm_mode = FALSE;
 			this->request = req;
 			this->request_len = req_len;
+			this->rel_deadline = rel_deadline;
 			if(blocking){
-				ret = linber_request_service(	service_uri, service_uri_len,		\
-										10, request, request_len,					\
-										&response, &response_len, &response_shm_mode);
+				ret = linber_request_service(	service_uri, 			\
+												service_uri_len,		\
+												rel_deadline,			\
+												request,				\
+												request_len,			\
+												&response,				\
+												&response_len,			\
+												&response_shm_mode		\
+											);
 				*res = response;
 				*res_len = response_len;
 				request_state = 2;
 			} else {
-				ret = linber_request_service_no_blocking(	service_uri, service_uri_len,	\
-															10, request, request_len,		\
-															&token);
+				ret = linber_request_service_no_blocking(	service_uri,		\
+															service_uri_len,	\
+															rel_deadline,		\
+															request,			\
+															request_len,		\
+															&token,				\
+															&abs_deadline		\
+														);
 				request_state = 1;
 			}
 			if(ret < 0){
@@ -78,24 +91,36 @@ class linberClient {
 		}
 	}
 
-	void linber_sendRequest_shm(char **res, int *res_len, bool blocking){
+	void linber_sendRequest_shm(char **res, int *res_len, bool blocking, int rel_deadline){
 		unsigned long token;
 		int ret, response_len;
 		char *response;
 		boolean response_shm_mode;
 
 		if(request_shm_state == 0){
+			this->rel_deadline = rel_deadline;
 			if(blocking){
-				ret = linber_request_service_shm(	service_uri, service_uri_len,					\
-												10, request_shm_key, request_len,					\
-												&response, &response_len, &response_shm_mode);
+				ret = linber_request_service_shm(	service_uri,						\
+													service_uri_len,					\
+													rel_deadline,						\
+													request_shm_key,					\
+													request_len,						\
+													&response,							\
+													&response_len,						\
+													&response_shm_mode					\
+												);
 				*res = response;
 				*res_len = response_len;
 				request_shm_state = 2;
 			} else {
-				ret = linber_request_service_no_blocking_shm(	service_uri, service_uri_len,		\
-																10, request_shm_key, request_len,	\
-																&token);
+				ret = linber_request_service_no_blocking_shm(	service_uri,			\
+																service_uri_len,		\
+																rel_deadline,			\
+																request_shm_key,		\
+																request_len,			\
+																&token,					\
+																&abs_deadline			\
+															);
 				request_shm_state = 1;
 			}
 		}
@@ -104,12 +129,17 @@ class linberClient {
 		}
 	}
 
-	void linber_get_result(){
+	void linber_get_sponse(){
 		int ret;
 		if((request_state == 1) || (request_shm_state == 1)){
-			ret = linber_request_service_get_response(	service_uri, service_uri_len,					\
-														&response, &response_len, &response_shm_mode,	\
-														&token);
+			ret = linber_request_service_get_response(	service_uri,		\
+														service_uri_len,	\
+														&response,			\
+														&response_len,		\
+														&response_shm_mode,	\
+														&token,				\
+														abs_deadline		\
+													);
 			if(ret < 0){
 				printf("get result failed\n");
 				return;

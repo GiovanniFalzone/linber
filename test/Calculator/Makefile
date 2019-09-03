@@ -18,7 +18,8 @@ PROTO = Calculator.proto
 all: $(TARGET)
 
 %: %.cpp $(DEPS) $(PROTO) 
-	$(CC) -o $@ $< $(SRCS) $(CCFLAGS) $(LDLIBS) 
+	sudo $(CC) -o $@ $< $(SRCS) $(CCFLAGS) $(LDLIBS) 
+	sudo chmod u+s $@
 
 Calculator.pb:
 	protoc $(PROTO) --cpp_out=.

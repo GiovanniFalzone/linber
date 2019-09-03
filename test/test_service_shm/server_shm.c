@@ -86,24 +86,27 @@ void *thread_job(void *args){
 					passed_millis = (end.tv_sec - start.tv_sec)*1000;
 					passed_millis = (end.tv_usec - start.tv_usec)*0.001;
 				} while(passed_millis < worker.exec_time);
-
-				ret = linber_end_job_service_shm(	service_uri,			\
-													uri_len,				\
-													worker.service_token,	\
-													worker_id,				\
-													request,				\
-													request_shm_mode,		\
-													response,				\
-													response_len,			\
-													response_key			\
-												);
 			}
+
+// always execute end job, also if it is a spurious job, needed to free the request memory
+			ret = linber_end_job_service_shm(	service_uri,			\
+												uri_len,				\
+												worker.service_token,	\
+												worker_id,				\
+												request,				\
+												request_shm_mode,		\
+												response,				\
+												response_len,			\
+												response_key			\
+											);
 		}
 	}
 	linber_destroy_worker(file_str);
 	printf("Thread %d died\n", worker_id);
 	return NULL;
 }
+
+
 
 int main(int argc,char* argv[]){
 	if (signal(SIGINT, sig_handler) == SIG_ERR)

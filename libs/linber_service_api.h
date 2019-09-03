@@ -11,11 +11,18 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <errno.h>
+#include <time.h>
 #include "linber_ioctl.h"
 
 #define LINBER_ERROR_DEVICE_FILE	-1
 #define LINBER_ERROR_URI			-2
 #define LINBER_SHM_ERROR			-3
+
+//----------------------
+//#define DEBUG
+//#define DEBUG_MESSAGE
+//----------------------
+
 
 char *create_shm_from_key(key_t key, int len, int *id);
 char *create_shm_from_filepath(char* file_str, int low_id, int len, key_t *key, int *id);

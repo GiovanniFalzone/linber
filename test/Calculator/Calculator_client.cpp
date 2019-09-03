@@ -6,6 +6,8 @@
 
 using namespace std;
 
+#define REL_DEADLINE 100
+
 class calculator_client : public linberClient{
 	Calculator::Calculator_request request_msg;
 	Calculator::Calculator_response response_msg;
@@ -27,7 +29,7 @@ class calculator_client : public linberClient{
 		request = (char*)malloc(request_len);
 		request_msg.SerializeToArray(request, request_len);
 
-		linber_sendRequest(request, request_len, &response, &response_len, true);
+		linber_sendRequest(request, request_len, &response, &response_len, true, REL_DEADLINE);
 
 		response_msg.ParseFromArray(response, response_len);
 		linber_end_operation();
@@ -48,7 +50,7 @@ class calculator_client : public linberClient{
 		request = (char*)malloc(request_len);
 		request_msg.SerializeToArray(request, request_len);
 
-		linber_sendRequest(request, request_len, &response, &response_len, true);
+		linber_sendRequest(request, request_len, &response, &response_len, true, REL_DEADLINE);
 
 		response_msg.ParseFromArray(response, response_len);
 		linber_end_operation();
@@ -69,7 +71,7 @@ class calculator_client : public linberClient{
 		request = (char*)malloc(request_len);
 		request_msg.SerializeToArray(request, request_len);
 
-		linber_sendRequest(request, request_len, &response, &response_len, true);
+		linber_sendRequest(request, request_len, &response, &response_len, true, REL_DEADLINE);
 
 		response_msg.ParseFromArray(response, response_len);
 		linber_end_operation();
@@ -90,7 +92,7 @@ class calculator_client : public linberClient{
 		request = (char*)malloc(request_len);
 		request_msg.SerializeToArray(request, request_len);
 
-		linber_sendRequest(request, request_len, &response, &response_len, true);
+		linber_sendRequest(request, request_len, &response, &response_len, true, REL_DEADLINE);
 
 		response_msg.ParseFromArray(response, response_len);
 		linber_end_operation();
@@ -112,7 +114,7 @@ class calculator_client : public linberClient{
 		request_len = request_msg.ByteSize();
 		linber_create_shm(&request, request_len);
 		request_msg.SerializeToArray(request, request_len);
-		linber_sendRequest_shm(&response, &response_len, true);
+		linber_sendRequest_shm(&response, &response_len, true, REL_DEADLINE);
 
 		response_msg.ParseFromArray(response, response_len);
 		linber_end_operation();
@@ -132,7 +134,7 @@ class calculator_client : public linberClient{
 		request = (char*)malloc(request_len);
 		request_msg.SerializeToArray(request, request_len);
 
-		linber_sendRequest(request, request_len, &response, &response_len, true);
+		linber_sendRequest(request, request_len, &response, &response_len, true, REL_DEADLINE);
 
 		response_msg.ParseFromArray(response, response_len);
 		linber_end_operation();

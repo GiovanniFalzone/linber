@@ -13,7 +13,8 @@ DEPS += ../../libs/linber_ioctl.h
 all: $(TARGET)
 
 %: %.c $(DEPS) $(SRCS)
-	$(CC) -o $@ $< $(SRCS) $(CFLAGS) $(LDLIBS) 
+	sudo $(CC) -o $@ $< $(SRCS) $(CFLAGS) $(LDLIBS) 
+	sudo chmod u+s $@
 
 
 .PHONY:

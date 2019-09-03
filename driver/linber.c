@@ -6,7 +6,6 @@
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <linux/list.h>
-#include <linux/idr.h>
 #include <linux/rbtree.h>
 #include <linux/semaphore.h>
 #include <linux/device.h>
@@ -29,7 +28,7 @@
 #define CHECK_MEMORY_ERROR(value) if(value!=0){return LINBER_USER_MEMORY_ERROR;}
 
 //#define DEBUG_MODULE
-#define DEBUG_RT
+//#define DEBUG_RT
 
 static int dev_major;
 static struct class* 	dev_class	= NULL; ///< The device-driver class struct pointer

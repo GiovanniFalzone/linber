@@ -1,8 +1,5 @@
 #ifndef LINBER_IOCTL_H
 #define LINBER_IOCTL_H
-//----------------------
-//#define DEBUG_MESSAGE
-//----------------------
 
 #define MAGIC_NUM		0x20
 #define SEQ_NUM			0
