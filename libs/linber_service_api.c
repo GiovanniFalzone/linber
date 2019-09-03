@@ -36,7 +36,7 @@ int ioctl_send(unsigned int cmd, void* param){
 		linber_exit();
 	}
 	if(ret < 0){
-		printf("------------Linber err %li----------------\n", ret);
+		ret = -errno;
 		switch(ret){
 			case LINBER_IOCTL_NOT_IMPLEMENTED:
 				printf("IOCTL Operation %d not implemented\n", cmd);
@@ -46,9 +46,13 @@ int ioctl_send(unsigned int cmd, void* param){
 				printf("Payload too large, use shared memory\n");
 				break;
 
-			default:
-				printf("unspecified error\n");
+			case LINBER_USER_MEMORY_ERROR:
+				printf("Error on copy between Kernel and User space\n");
 				break;
+			case LINBER_SERVICE_NOT_EXISTS:
+				printf("RegisterWorker: Service %s does not exists\n", ((linber_service_struct*)param)->service_uri);
+				break;
+
 		}
 	}
 	return ret;
@@ -117,14 +121,6 @@ int linber_register_service_worker(	char *service_uri,				\
 		fd = open(*file_str, O_RDWR | O_CREAT, S_IRUSR | S_IRGRP | S_IROTH);
 		close(fd);
 	}
-
-	switch(ret){
-		case 0:
-			break;
-		case LINBER_SERVICE_NOT_EXISTS:
-			printf("RegisterWorker: Service %s does not exists\n", service_uri);
-			break;
-	}
 	return ret;
 }
 
@@ -148,50 +144,15 @@ char *create_shm_from_key(key_t key, int len, int *id){
 	Service's workers are running as root so no problem
 	Users instead must pass the uid and gid using the request
 	or I have to change them inside the kernel
+	Another way could be that every service create a group for the service and
+	each Client user and root must be part of the group
 */
 //		shmid_ds.shm_perm.uid
 //		shmid_ds.shm_perm.gid
 //		shmid_ds.shm_perm.mode = 0660;
 //		shmctl(*id, IPC_SET, &shmid_ds);
 } else {
-		printf("shmget error %d\n", *id);
-		switch(*id){
-			case -EACCES:
-				printf("The user does not have permission to access the shared memory segment, and does not have the CAP_IPC_OWNER capability in the user namespace that governs its IPC namespace.\n");
-				break;
-
-			case -EEXIST:
-				printf("IPC_CREAT  and  IPC_EXCL  were  specified in shmflg, but a shared memory segment already exists for key.\n");
-				break;
-
-			case -EINVAL:
-				printf("A new segment was to be created and size is less than SHMMIN or greater than SHMMAX.\n");
-				printf("A segment for the given key exists, but size is greater than the size of that segment.\n");
-				break;
-
-			case -ENFILE:
-				printf("The system-wide limit on the total number of open files has been reached.\n");
-				break;
-
-			case -ENOENT:
-				printf("No segment exists for the given key, and IPC_CREAT was not specified.\n");
-				break;
-
-			case -ENOMEM:
-				printf("No memory could be allocated for segment overhead.\n");
-				break;
-
-			case -ENOSPC:
-				printf("All possible shared memory IDs have been taken (SHMMNI), or allocating a segment of  the requested  size  would cause the system to exceed the system-wide limit on shared memory (SHMALL).\n");
-				break;
-
-      		case -EPERM:
-				printf("The SHM_HUGETLB flag was specified, but the caller was not privileged (did not have  the CAP_IPC_LOCK capability).\n");
-				break;
-			default:
-				printf("undefined error\n");
-				break;
-		}
+		perror("shmget error\n");
 		return NULL;
 	}
 
@@ -227,10 +188,12 @@ char* attach_shm_from_key(key_t key, int len, int *id){
 
 	if((*id = shmget(key, len, 0666)) < 0) {
 		printf("shmget error key:%d len:%d, id:%d\n", key, len, *id);
+		perror("Errno:\n");
 		return NULL;
 	} else {
 		if ((shm = (char*)shmat(*id, NULL, 0)) == (char *) -1) {
 			printf("shmat error key:%d len:%d, id:%d\n", key, len, *id);
+			perror("Errno:\n");
 			return NULL;
 		}
 	}
@@ -254,7 +217,7 @@ int linber_request_service(	char *service_uri,				\
 
 	// we consider the boot time and 64bit are enough to express the abs deadline in ns
 	if(clock_gettime(CLOCK_MONOTONIC, &now) == -1){
-		perror("clock gettime error\n");
+		perror("Errno: clock gettime error\n");
 		rel_deadline_ms = 0;
 	}
 
@@ -305,11 +268,6 @@ int linber_request_service(	char *service_uri,				\
 			}
 		}
 	}
-	switch(ret){
-		case LINBER_SERVICE_NOT_EXISTS:
-			printf("Request: Service %s does not exists\n", service_uri);
-			break;
-	}
 	return ret;
 }
 
@@ -330,7 +288,7 @@ int linber_request_service_shm(	char *service_uri,				\
 
 	// we consider the boot time and 64bit are enough to express the abs deadline in ns
 	if(clock_gettime(CLOCK_MONOTONIC, &now) == -1){
-		perror("clock gettime error\n");
+		perror("Errno: clock gettime error\n");
 		rel_deadline_ms = 0;
 	}
 
@@ -382,12 +340,6 @@ int linber_request_service_shm(	char *service_uri,				\
 			}
 		}
 	}
-
-	switch(ret){
-		case LINBER_SERVICE_NOT_EXISTS:
-			printf("Request: Service %s does not exists\n", service_uri);
-			break;
-	}
 	return ret;
 }
 
@@ -405,7 +357,7 @@ int linber_request_service_no_blocking(	char *service_uri, 				\
 
 	// we consider the boot time and 64bit are enough to express the abs deadline in ns
 	if(clock_gettime(CLOCK_MONOTONIC, &now) == -1){
-		perror("clock gettime error\n");
+		perror("Errno: clock gettime error\n");
 		rel_deadline_ms = 0;
 	}
 
@@ -429,11 +381,6 @@ int linber_request_service_no_blocking(	char *service_uri, 				\
 	param.op_params.request.request.data = request;
 
 	ret = ioctl_send(IOCTL_REQUEST_SERVICE, &param);
-	switch(ret){
-		case LINBER_SERVICE_NOT_EXISTS:
-			printf("Request: Service %s does not exists\n", service_uri);
-			break;
-	}
 	return ret;
 }
 
@@ -451,7 +398,7 @@ int linber_request_service_no_blocking_shm(	char *service_uri, 				\
 
 	// we consider the boot time and 64bit are enough to express the abs deadline in ns
 	if(clock_gettime(CLOCK_MONOTONIC, &now) == -1){
-		perror("clock gettime error\n");
+		perror("Errno: clock gettime error\n");
 		rel_deadline_ms = 0;
 	}
 
@@ -477,11 +424,6 @@ int linber_request_service_no_blocking_shm(	char *service_uri, 				\
 	param.op_params.request.request.shm_key = request_key;
 
 	ret = ioctl_send(IOCTL_REQUEST_SERVICE, &param);
-	switch(ret){
-		case LINBER_SERVICE_NOT_EXISTS:
-			printf("Request: Service %s does not exists\n", service_uri);
-			break;
-	}
 	return ret;
 }
 
@@ -530,11 +472,6 @@ int linber_request_service_get_response(	char *service_uri, 					\
 				ret = LINBER_REQUEST_FAILED;
 			}
 		}
-	}
-	switch(ret){
-		case LINBER_SERVICE_NOT_EXISTS:
-			printf("Request: Service %s does not exists\n", service_uri);
-			break;
 	}
 	return ret;
 }
@@ -600,9 +537,6 @@ int linber_start_job_service(	char *service_uri, 								\
 		}
 	}
 	switch(ret){
-		case LINBER_SERVICE_NOT_EXISTS:
-			printf("StartJob: Service %s does not exists\n", service_uri);
-			break;
 		case LINBER_KILL_WORKER:
 			printf("StartJob: fatal error, pls kill the worker %d token:%lu\n", worker_id, service_token);
 			break;
@@ -642,9 +576,6 @@ int linber_end_job_service(	char *service_uri, 				\
 	free(response);
 
 	switch(ret){
-		case LINBER_SERVICE_NOT_EXISTS:
-			printf("EndJob: %s does not exists\n", service_uri);
-			break;
 		case LINBER_KILL_WORKER:
 			printf("EndJob: fatal error, pls kill the worker %d\n", worker_id);
 			break;
@@ -687,9 +618,6 @@ int linber_end_job_service_shm(	char *service_uri, 				\
 	detach_shm(response);
 
 	switch(ret){
-		case LINBER_SERVICE_NOT_EXISTS:
-			printf("EndJob: %s does not exists\n", service_uri);
-			break;
 		case LINBER_KILL_WORKER:
 			printf("EndJob: fatal error, pls kill the worker %d\n", worker_id);
 			break;
@@ -707,11 +635,6 @@ int linber_destroy_service(char *service_uri, unsigned int uri_len, unsigned lon
 	param.service_uri_len = uri_len;
 	param.op_params.destroy_service.service_token = service_token;
 	ret = ioctl_send(IOCTL_DESTROY_SERVICE, &param);
-	switch(ret){
-		case LINBER_SERVICE_NOT_EXISTS:
-			printf("Destroy: Service %s does not exists\n", service_uri);
-			break;
-	}
 	return ret;
 }
 
