@@ -32,7 +32,7 @@ This is a temporary condition, in order to maintain your brain free of this in t
 	//------- service with 1 worker, 5 ms execution time, 100 ms of period and 2 request per period (P=100, Q=2*exec_time) used for SCHED_DEADLINE
 	./test/test_service/server org.service 1 5 100 2
 
-	//------- client with 4 concurrent request (threads), delayed on creation by a random value in range [1, 10]ms, with a relative deadline of 100ms
+	//------- client with 4 concurrent request (threads), delayed on creation by a random value in range [1, 10]ms, with a relative deadline of 1000ms
 	// the random delay on creation allow to simulate the general case between periodic and sporadic requests
 	./test/test_service/client_blocking org.service 4 10 1000
 
