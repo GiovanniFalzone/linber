@@ -25,10 +25,11 @@
 #define DEV_NAME DEVICE_FILE_NAME
 #define CLA_NAME "linberclass"
 
-#define CHECK_MEMORY_ERROR(value) if(value!=0){return LINBER_USER_MEMORY_ERROR;}
+#define CHECK_MEMORY_ERROR(value) if((value)!=0){return LINBER_USER_MEMORY_ERROR;}
+#define CHECK_KMALLOC_ERROR(value) if((value) == NULL){return LINBER_KERNEL_MEMORY_ERROR;}
 
-//#define DEBUG_MODULE
-//#define DEBUG_RT
+#define DEBUG_MODULE
+#define DEBUG_RT
 
 static int dev_major;
 static struct class* 	dev_class	= NULL; ///< The device-driver class struct pointer
@@ -57,11 +58,12 @@ static ssize_t	dev_write(struct file *f, const char *buf, size_t sz, loff_t *off
 
 // ------------------------------------------------------
 static inline RequestNode* create_Request(void){
-	RequestNode *req_node;
-	req_node = kmalloc(sizeof(*req_node) ,GFP_KERNEL);
-	req_node->request_accepted = false;
-	req_node->result_cmd = LINBER_ABORT_REQUEST;	// if not fixed will be aborted	
-	sema_init(&req_node->Request_sem, 0);
+	RequestNode *req_node = kmalloc(sizeof(*req_node) ,GFP_KERNEL);
+	if(req_node != NULL){
+		req_node->request_accepted = false;
+		req_node->result_cmd = LINBER_ABORT_REQUEST;	// if not fixed will be aborted	
+		sema_init(&req_node->Request_sem, 0);
+	}
 	return req_node;
 }
 
@@ -161,6 +163,9 @@ static ServiceNode * linber_create_service(linber_service_struct *obj){
 	int id = 0;
 	ServiceNode *ser_node = NULL;
 	ser_node = kmalloc(sizeof(*ser_node) ,GFP_KERNEL);
+	if(ser_node == NULL){
+		return NULL;
+	}
 	INIT_LIST_HEAD(&ser_node->Completed_RequestsHead);
 
 	ser_node->Requests_rbtree = RB_ROOT;
@@ -181,14 +186,23 @@ static ServiceNode * linber_create_service(linber_service_struct *obj){
 	ser_node->Workers.next_id = 0;
 	ser_node->Workers.count_registered = 0;
 	ser_node->Workers.worker_slots = kmalloc(ser_node->Workers.Max_Workers*sizeof(worker_struct), GFP_KERNEL);
+
+	if(ser_node->Workers.worker_slots == NULL){
+		destroy_service(ser_node);
+		return NULL;
+	}
+
 	for(id=0; id<ser_node->Workers.Max_Workers; id++){
 		ser_node->Workers.worker_slots[id].request = NULL;
 		ser_node->Workers.worker_slots[id].task = NULL;
 	}
 
-
 	mutex_lock(&linber.mutex);
-	Insert_ServiceNode(&linber.Services_rbtree, ser_node);
+	if(!Insert_ServiceNode(&linber.Services_rbtree, ser_node)){
+		mutex_unlock(&linber.mutex);
+		destroy_service(ser_node);
+		return NULL;
+	}
 	list_add_tail(&ser_node->list, &linber.Services);
 
 	linber.Services_count++;
@@ -222,14 +236,18 @@ static RequestNode* enqueue_request_for_service(	ServiceNode *ser_node, 			\
 		req_node->request_len = request_len;
 
 		mutex_lock(&ser_node->service_mutex);
-			Insert_ReqNode_Sorted_by_Deadline(&ser_node->Requests_rbtree, req_node);
+			if(!Insert_ReqNode_Sorted_by_Deadline(&ser_node->Requests_rbtree, req_node)){
+				mutex_unlock(&ser_node->service_mutex);
+				destroy_request(req_node);
+				return NULL;
+			}
 			ser_node->Request_count++;
 			req_node->request_accepted = true;
 		mutex_unlock(&ser_node->service_mutex);
 
 		up(&ser_node->Workers.sem_for_request);
 		if(blocking){
-			down(&req_node->Request_sem);
+			down_interruptible(&req_node->Request_sem);
 		}
 	}
 	return req_node;
@@ -400,17 +418,15 @@ static int linber_request_service(linber_service_struct *obj){
 			abs_deadline_ns = obj->op_params.request.abs_deadline_ns;
 			if(!shm_mode){
 				if(request_len > LINBER_MAX_MEM_SIZE){
-printk(KERN_INFO "check 1\n");
 					return LINBER_PAYLOAD_SIZE_ERROR;
 				}
-				request = kmalloc(request_len, GFP_KERNEL);
+				CHECK_KMALLOC_ERROR(request = kmalloc(request_len, GFP_KERNEL));
 				CHECK_MEMORY_ERROR(copy_from_user(request, obj->op_params.request.request.data, request_len));
 			} else {
 				request_key = obj->op_params.request.request.shm_key;
 			}
 			req_node = enqueue_request_for_service(ser_node, request, request_len, blocking, shm_mode, request_key, abs_deadline_ns);
 			if(req_node == NULL){
-printk(KERN_INFO "check 2\n");
 				return LINBER_REQUEST_FAILED;
 			}
 			CHECK_MEMORY_ERROR(put_user(req_node->token, obj->op_params.request.ptr_token));
@@ -425,10 +441,9 @@ printk(KERN_INFO "check 2\n");
 			CHECK_MEMORY_ERROR(get_user(token, obj->op_params.request.ptr_token));
 			req_node = find_Waiting_or_Completed_Request(ser_node, abs_deadline_ns, token);
 			if(req_node == NULL){
-printk(KERN_INFO "check 4\n");
 				return LINBER_REQUEST_FAILED;
 			}
-			down(&req_node->Request_sem);
+			down_interruptible(&req_node->Request_sem);
 			status = LINBER_REQUEST_COMPLETED;
 		}
 		//----------------------completed-----------------------
@@ -443,7 +458,6 @@ printk(KERN_INFO "check 4\n");
 		}
 	} else {
 		ret = LINBER_SERVICE_NOT_EXISTS;
-printk(KERN_INFO "check 5\n");
 	}
 	return ret;
 }
@@ -471,11 +485,9 @@ static int linber_request_service_get_response(linber_service_struct *obj){
 			}
 			kfree(req_node);
 		} else {
-printk(KERN_INFO "check 6\n");
 			ret = LINBER_REQUEST_FAILED;
 		}
 	} else {
-printk(KERN_INFO "check 7\n");
 		ret = LINBER_SERVICE_NOT_EXISTS;
 	}
 	return ret;
@@ -661,7 +673,7 @@ static int linber_End_Job(linber_service_struct *obj){
 						req_node->result_cmd = LINBER_REQUEST_FAILED;
 						ret = LINBER_PAYLOAD_SIZE_ERROR;
 					} else {
-						req_node->response.data = kmalloc(req_node->response_len, GFP_KERNEL);
+						CHECK_KMALLOC_ERROR(req_node->response.data = kmalloc(req_node->response_len, GFP_KERNEL));
 						CHECK_MEMORY_ERROR(copy_from_user(req_node->response.data, obj->op_params.end_job.response.data, req_node->response_len));
 					}
 				}
@@ -671,6 +683,8 @@ static int linber_End_Job(linber_service_struct *obj){
 				return LINBER_SERVICE_SKIP_JOB;
 			}
 		}
+	} else {
+		return LINBER_SERVICE_NOT_EXISTS;
 	}
 	return ret;
 }
@@ -689,10 +703,11 @@ static int linber_destroy_service(linber_service_struct *obj){
 
 static int linber_get_system_status(void* system_user){
 	system_status system;
-	service_status *services = kmalloc(MAX_SERVICES * sizeof(service_status), GFP_KERNEL);
+	service_status *services;
 	ServiceNode *ser_node;
 	ServiceNode ser_node_cpy;
 	int i = 0;
+	CHECK_KMALLOC_ERROR(services = kmalloc(MAX_SERVICES * sizeof(service_status), GFP_KERNEL));
 	CHECK_MEMORY_ERROR(copy_from_user(&system, system_user, sizeof(system_status)));
 	system.Max_Working = linber.Max_Working;
 	system.services_count = linber.Services_count;
@@ -729,9 +744,9 @@ static long	linber_ioctl(struct file *f, unsigned int ioctl_op, unsigned long io
 	char *uri_tmp;
 	linber_service_struct *obj;
 	if(ioctl_op != IOCTL_SYSTEM_STATUS){
-		obj = kmalloc(sizeof(linber_service_struct), GFP_KERNEL);
+		CHECK_KMALLOC_ERROR(obj = kmalloc(sizeof(linber_service_struct), GFP_KERNEL));
 		CHECK_MEMORY_ERROR(copy_from_user((void*)obj, (void*)ioctl_param, sizeof(linber_service_struct)));
-		uri_tmp = kmalloc(obj->service_uri_len + 1, GFP_KERNEL);
+		CHECK_KMALLOC_ERROR(uri_tmp = kmalloc(obj->service_uri_len + 1, GFP_KERNEL));
 		CHECK_MEMORY_ERROR(copy_from_user((void*)uri_tmp, (void*)obj->service_uri, obj->service_uri_len));
 		uri_tmp[obj->service_uri_len] = '\0';
 		obj->service_uri = uri_tmp;

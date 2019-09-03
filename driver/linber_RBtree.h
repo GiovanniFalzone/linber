@@ -49,6 +49,9 @@ bool Insert_ServiceNode(struct rb_root *root, struct ServiceNode *ser_node){
 		}
 	}
 	new_container = kmalloc(sizeof(struct RBtree_ServiceNode), GFP_KERNEL);
+	if(new_container == NULL){
+		return false;
+	}
 	new_container->service_uri = ser_node->uri;				// I don't need to copy the string
 	new_container->Service = ser_node;
 	rb_link_node(&new_container->node, parent, new);
@@ -148,8 +151,9 @@ bool Insert_ReqNode_Sorted_by_Deadline(struct rb_root *root, struct RequestNode 
 		#endif
 		new_container = kmalloc(sizeof(struct RBtree_RequestNode), GFP_KERNEL);
 		if(new_container == NULL){
-			printk(KERN_INFO "linber:: allocation error\n");
+			return false;
 		}
+
 		INIT_LIST_HEAD(&new_container->RequestHead);
 		new_container->unique_id = req_node->abs_deadline_ns;
 		list_add_tail(&req_node->list, &new_container->RequestHead);
