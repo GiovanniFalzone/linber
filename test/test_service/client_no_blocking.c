@@ -1,12 +1,15 @@
+/*-------------------------------------------------------------------------------------------------------
+	This is a Client requesting a service with non blocking procedure, it pass the request as buffer
+--------------------------------------------------------------------------------------------------------*/
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <pthread.h>
 #include <string.h>
-#include "../../libs/linber_service_api.h"
 #include <sys/time.h>
 #include <signal.h>
+#include "../../libs/linber_service_api.h"
 
 #define DEFAULT_MESSAGE "Hello World\0"
 

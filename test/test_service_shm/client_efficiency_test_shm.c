@@ -1,3 +1,6 @@
+/*-------------------------------------------------------------------------------------------------------
+	This is a Client requesting a service with non blocking procedure, it pass the request as shared memory
+--------------------------------------------------------------------------------------------------------*/
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>

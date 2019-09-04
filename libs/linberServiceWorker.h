@@ -1,3 +1,13 @@
+/*-------------------------------------------------------------------------------------------------------
+	Extend this class to realize a linber worker, the class need the service uri and  service token.
+	Implement the virtual method execute job that will be executed every request.
+	The request is available as protected member of the class, don't free or manipulate it.
+	this class is valid for a Worker that use dynamic memory for the buffer, put your buffer address
+	in the response protected member and don't free it, it'll be free automatically.
+
+	For a practical example see the Calculator example in the test directory
+--------------------------------------------------------------------------------------------------------*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string>

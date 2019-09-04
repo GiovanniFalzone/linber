@@ -1,3 +1,7 @@
+/*-------------------------------------------------------------------------------------------------------
+	This is a simple Client application using the linber_client class to implement a client of a service
+--------------------------------------------------------------------------------------------------------*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <iostream>

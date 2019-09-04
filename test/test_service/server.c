@@ -1,3 +1,14 @@
+/*-------------------------------------------------------------------------------------------------------
+	This is a Service Server running with N workers that are using kernel buffer memory to pass the 
+	response to the Client.
+	arguments:
+	 #1		service uri
+	 #2		number of workers
+	 #3		execution time per single request
+	 #4		server period used by SCHED_DEADLINE
+	 #5		Request per period, to calculate the budget fo SCHED_DEADLINE as (RPP * execution time)
+--------------------------------------------------------------------------------------------------------*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

@@ -1,3 +1,7 @@
+/*-------------------------------------------------------------------------------------------------------
+	This is a simple Server application using the linber_worker class to implement a Service
+--------------------------------------------------------------------------------------------------------*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <iostream>

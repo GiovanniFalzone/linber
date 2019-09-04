@@ -1,3 +1,9 @@
+/*-------------------------------------------------------------------------------------------------------
+	Extend this class to implement a Service Client using the linber framework, it needs just the service uri
+	and service len.
+	For a practical example see the Calculator example in the test directory
+--------------------------------------------------------------------------------------------------------*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string>
@@ -31,7 +37,11 @@ class linberClient {
 	~linberClient(){
 		linber_exit();
 	}
-
+/*-------------------------------------------------------------------------------------------------------
+	Blocking or non Blocking method to send the request passed as pointer.
+	The result is returned as a pointer in the first argument.
+	Relative deadline is expressed as milliseconds.
+--------------------------------------------------------------------------------------------------------*/
 	void linber_sendRequest(char *req, int req_len, char **res, int *res_len, bool blocking, int rel_deadline){
 		int ret;
 		if((request_state == 0) && (request_shm_state == -1)){
@@ -72,7 +82,10 @@ class linberClient {
 		}
 	}
 
-
+/*-------------------------------------------------------------------------------------------------------
+	Use this method to create a shared memory for the request and then send it using then
+	send request for shared memory.
+--------------------------------------------------------------------------------------------------------*/
 	void linber_create_shm(char **req, int req_len){
 		key_t shm_key;
 		int shm_id;
@@ -91,6 +104,11 @@ class linberClient {
 		}
 	}
 
+/*-------------------------------------------------------------------------------------------------------
+	Use this method to send a request created with the linber_create_shm.
+	The result is returned as a pointer in the first argument.
+	Relative deadline is expressed as milliseconds.
+--------------------------------------------------------------------------------------------------------*/
 	void linber_sendRequest_shm(char **res, int *res_len, bool blocking, int rel_deadline){
 		unsigned long token;
 		int ret, response_len;
@@ -129,7 +147,10 @@ class linberClient {
 		}
 	}
 
-	void linber_get_sponse(){
+/*-------------------------------------------------------------------------------------------------------
+	Use this method to retrieve a response after a non-blocking send request operation
+--------------------------------------------------------------------------------------------------------*/
+	char* linber_get_response(){
 		int ret;
 		if((request_state == 1) || (request_shm_state == 1)){
 			ret = linber_request_service_get_response(	service_uri,		\
@@ -142,18 +163,23 @@ class linberClient {
 													);
 			if(ret < 0){
 				printf("get result failed\n");
-				return;
+				return NULL;
 			}
 			if(request_state == 1){
 				request_state = 2;
 			} else {
 				request_shm_state = 2;
 			}
+			return request;
 		} else {
 			printf("no request have been sent\n");
+			return NULL;
 		}
 	}
 
+/*-------------------------------------------------------------------------------------------------------
+	Always call this operation after have comsumed the message.
+--------------------------------------------------------------------------------------------------------*/
 	void linber_end_operation(){
 		if((request_state == 1) || (request_shm_state == 0 || request_shm_state == 1)){	// only request
 			response = NULL;
