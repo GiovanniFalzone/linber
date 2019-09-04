@@ -56,7 +56,10 @@ static ssize_t	dev_write(struct file *f, const char *buf, size_t sz, loff_t *off
 }
 
 
-// ------------------------------------------------------
+/*---------------------------------------------------------------------------------------------
+	Create, initialize and return a new RequestNode allocated in Dynamic memory
+	Return NULL on kmalloc error
+---------------------------------------------------------------------------------------------*/
 static inline RequestNode* create_Request(void){
 	RequestNode *req_node = kmalloc(sizeof(*req_node) ,GFP_KERNEL);
 	if(req_node != NULL){
@@ -67,14 +70,21 @@ static inline RequestNode* create_Request(void){
 	return req_node;
 }
 
-static ServiceNode* findService(char *uri){
-	ServiceNode *ser_node = NULL;
-	mutex_lock(&linber.mutex);
-	ser_node = get_ServiceNode(&linber.Services_rbtree, uri);
-	mutex_unlock(&linber.mutex);
-	return ser_node;
+
+/*---------------------------------------------------------------------------------------------
+	Start the destroying procedure, mark the request as failed and wake up the blocked client.
+	The Client will cleanup and complete the destroy procedure
+---------------------------------------------------------------------------------------------*/
+static inline void destroy_request(RequestNode *req_node){
+	req_node->result_cmd = LINBER_ABORT_REQUEST;
+	up(&req_node->Request_sem);	// wake up client
 }
 
+/*---------------------------------------------------------------------------------------------
+	Find and return the RequestNode correspondig to the passed deadline and token.
+	Search in the Incoming request tree, in the serving slots of workers and in the completed queue
+	Return NULL if is missing, that is wrong service node, deadline or token
+---------------------------------------------------------------------------------------------*/
 static RequestNode* find_Waiting_or_Completed_Request(ServiceNode* ser_node, unsigned long abs_deadline_ns, unsigned long token){
 	RequestNode *req_node = NULL, *node = NULL;
 	int i = 0;
@@ -108,11 +118,9 @@ static RequestNode* find_Waiting_or_Completed_Request(ServiceNode* ser_node, uns
 	return req_node;
 }
 
-static inline void destroy_request(RequestNode *req_node){
-	req_node->result_cmd = LINBER_ABORT_REQUEST;
-	up(&req_node->Request_sem);	// wake up client
-}
-
+/*---------------------------------------------------------------------------------------------
+	Destroy the service structure, call this if you are the last worker
+---------------------------------------------------------------------------------------------*/
 static inline void clean_service(ServiceNode *ser_node){
 	linber.Services_count--;
 
@@ -127,6 +135,13 @@ static inline void clean_service(ServiceNode *ser_node){
 	kfree(ser_node);	// done by last worker
 }
 
+/*---------------------------------------------------------------------------------------------
+	Start the the Service destroying procedure.
+	1) start the destroying procedure for all the waiting requests
+	2) start the destroying procedure for all the completed requests
+	3) wake up all workers waiting for requests
+	4) if there are no workers then destroy the service structure
+---------------------------------------------------------------------------------------------*/
 static void destroy_service(ServiceNode *ser_node){
 	int i = 0;
 	RequestNode *req_node = NULL, *next = NULL;
@@ -157,9 +172,11 @@ static void destroy_service(ServiceNode *ser_node){
 	}
 }
 
-
-//-----------------------------------------------
-static ServiceNode * linber_create_service(linber_service_struct *obj){
+/*---------------------------------------------------------------------------------------------
+	Create and initialize a new ServiceNode structure starting from the Linber Registration struct
+	return NULL if kmalloc fail or if a Service with the same uri exist
+---------------------------------------------------------------------------------------------*/
+static ServiceNode* create_service(linber_service_struct *obj){
 	int id = 0;
 	ServiceNode *ser_node = NULL;
 	ser_node = kmalloc(sizeof(*ser_node) ,GFP_KERNEL);
@@ -212,6 +229,20 @@ static ServiceNode * linber_create_service(linber_service_struct *obj){
 	printk(KERN_INFO "linber::  New Service token:%lu %s, workers:%d,  exec time:%d\n", ser_node->token, ser_node->uri, ser_node->Workers.Max_Workers, ser_node->exec_time_ns);
 	return ser_node;
 }
+
+/*---------------------------------------------------------------------------------------------
+	Find and return the ServiceNode correspondig to the passed string.
+	If is missing then return NULL
+---------------------------------------------------------------------------------------------*/
+static inline ServiceNode* findService(char *uri){
+	ServiceNode *ser_node = NULL;
+	mutex_lock(&linber.mutex);
+	ser_node = get_ServiceNode(&linber.Services_rbtree, uri);
+	mutex_unlock(&linber.mutex);
+	return ser_node;
+}
+
+
 
 static RequestNode* enqueue_request_for_service(	ServiceNode *ser_node, 			\
 													char *request,					\
@@ -385,7 +416,7 @@ static int linber_register_service(linber_service_struct *obj){
 	ServiceNode *ser_node;
 	ser_node = findService(obj->service_uri);
 	if(ser_node == NULL){
-		ser_node = linber_create_service(obj);
+		ser_node = create_service(obj);
 		if(ser_node == NULL){
 			return LINBER_SERVICE_REGISTRATION_FAIL;
 		}
