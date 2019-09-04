@@ -32,7 +32,6 @@
 #define CHECK_KMALLOC_ERROR(value) if((value) == NULL){return LINBER_KERNEL_MEMORY_ERROR;}
 
 //-------------------------
-//#define DEBUG_MODULE
 //#define DEBUG_RT
 //-------------------------
 
@@ -451,7 +450,7 @@ static void Dispatch_as_BestEffort(void){
 	if (res < 0){
 		printk(KERN_INFO "Linber:: Error %i setting Best Effort scheduling\n", res);
 	} else {
-		#ifdef DEBUG_MODULE
+		#ifdef DEBUG_RT
 			printk(KERN_INFO "Linber:: Dispatched as Best Effort\n");
 		#endif
 	}
