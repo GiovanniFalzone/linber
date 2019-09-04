@@ -28,7 +28,7 @@ int get_service_time(unsigned int req_size, unsigned int *min_nsec, unsigned int
 		*avg_nsec = 0;
 		*min_nsec = 0;
 		request_len = req_size + 1;
-		request = malloc(request_len);	// request will be free by linber_request_service_clean
+		request = malloc(request_len);
 		if(request == NULL){
 			printf("Error: no memory\n");
 			return -1;
@@ -50,7 +50,9 @@ int get_service_time(unsigned int req_size, unsigned int *min_nsec, unsigned int
 			printf("aborted\n");
 			return ret;
 		}
-		linber_request_service_clean(request, FALSE, response, response_shm_mode);
+		linber_request_service_clean(response, response_shm_mode);
+
+		free(request);
 
 		passed_nanos = SEC_TO_nSEC(end.tv_sec) - SEC_TO_nSEC(start.tv_sec);
 		passed_nanos += (end.tv_nsec - start.tv_nsec);

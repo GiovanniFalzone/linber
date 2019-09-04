@@ -90,7 +90,7 @@ class calculator_service : public linberServiceWorker{
 		response_msg.set_result(result);
 		response_len = response_msg.ByteSize();
 
-		response = (char*)malloc(response_len);
+		response = (char*)malloc(response_len);		// don't free this, the parent class will do that
 		response_msg.SerializeToArray(response, response_len);
 	}
 };

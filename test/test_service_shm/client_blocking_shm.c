@@ -71,8 +71,11 @@ void *thread_job(void *args){
 			printf("Request %d Response: %d %s served in %lu ms\n", worker.id, response_len, response, passed_millis);
 		}
 
-		linber_request_service_clean(request, TRUE, response, response_shm_mode);
+		linber_request_service_clean(response, response_shm_mode);
 	}
+
+	detach_shm(request);
+
 	return NULL;
 }
 

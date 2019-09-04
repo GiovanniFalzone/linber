@@ -75,6 +75,7 @@ void *thread_job(void *args){
 					printf("Error in shared memory allocation\n");
 					break;
 				}
+
 				#ifdef DEBUG_MESSAGE
 					printf("thread id:%d job#:%d, serving request, %s %d\n", worker_id, job_num++, request, request_len);
 					memcpy(response, request, response_len);
@@ -88,19 +89,20 @@ void *thread_job(void *args){
 					passed_millis = (end.tv_sec - start.tv_sec)*1000;
 					passed_millis = (end.tv_usec - start.tv_usec)*0.001;
 				} while(passed_millis < worker.exec_time);
-			}
 
-// always execute end job, also if it is a spurious job, needed to free the request memory
-			ret = linber_end_job_service_shm(	service_uri,			\
-												uri_len,				\
-												worker.service_token,	\
-												worker_id,				\
-												request,				\
-												request_shm_mode,		\
-												response,				\
-												response_len,			\
-												response_key			\
-											);
+
+				ret = linber_end_job_service_shm(	service_uri,			\
+													uri_len,				\
+													worker.service_token,	\
+													worker_id,				\
+													request,				\
+													request_shm_mode,		\
+													response_len,			\
+													response_key			\
+												);
+				// free memory
+				detach_shm(response);
+			}
 		}
 	}
 	linber_destroy_worker(file_str);

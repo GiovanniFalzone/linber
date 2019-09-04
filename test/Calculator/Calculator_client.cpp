@@ -32,7 +32,9 @@ class calculator_client : public linberClient{
 		linber_sendRequest(request, request_len, &response, &response_len, true, REL_DEADLINE);
 
 		response_msg.ParseFromArray(response, response_len);
+
 		linber_end_operation();
+		free(request);
 
 		return response_msg.result();
 	}
@@ -53,7 +55,9 @@ class calculator_client : public linberClient{
 		linber_sendRequest(request, request_len, &response, &response_len, true, REL_DEADLINE);
 
 		response_msg.ParseFromArray(response, response_len);
+
 		linber_end_operation();
+		free(request);
 
 		return response_msg.result();
 	}
@@ -74,7 +78,9 @@ class calculator_client : public linberClient{
 		linber_sendRequest(request, request_len, &response, &response_len, true, REL_DEADLINE);
 
 		response_msg.ParseFromArray(response, response_len);
+
 		linber_end_operation();
+		free(request);
 
 		return response_msg.result();
 	}
@@ -95,7 +101,9 @@ class calculator_client : public linberClient{
 		linber_sendRequest(request, request_len, &response, &response_len, true, REL_DEADLINE);
 
 		response_msg.ParseFromArray(response, response_len);
+
 		linber_end_operation();
+		free(request);
 
 		return response_msg.result();
 	}
@@ -117,7 +125,9 @@ class calculator_client : public linberClient{
 		linber_sendRequest_shm(&response, &response_len, true, REL_DEADLINE);
 
 		response_msg.ParseFromArray(response, response_len);
+
 		linber_end_operation();
+		detach_shm(request);
 
 		return response_msg.result();
 	}
@@ -137,7 +147,9 @@ class calculator_client : public linberClient{
 		linber_sendRequest(request, request_len, &response, &response_len, true, REL_DEADLINE);
 
 		response_msg.ParseFromArray(response, response_len);
+
 		linber_end_operation();
+		free(request);
 
 		return response_msg.result();
 	}

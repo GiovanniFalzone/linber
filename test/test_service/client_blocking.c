@@ -41,7 +41,7 @@ void *thread_job(void *args){
 	unsigned long passed_millis = 0;
 	int ret = 0;
 	int request_len = strlen(DEFAULT_MESSAGE) + 1;
-	char *request = malloc(request_len);	// request will be free by linber_request_service_clean
+	char *request = malloc(request_len);
 	char *response;
 	int response_len;
 	boolean response_shm_mode;
@@ -63,8 +63,11 @@ void *thread_job(void *args){
 			passed_millis = (end.tv_sec - start.tv_sec)*1000 + (end.tv_usec - start.tv_usec)/1000;
 			printf("Request %d Response: %d %s served in %lu ms\n", worker.id, response_len, response, passed_millis);
 		}
-		linber_request_service_clean(request, FALSE, response, response_shm_mode);
+		linber_request_service_clean(response, response_shm_mode);
 	}
+
+	free(request);
+
 	return NULL;
 }
 
