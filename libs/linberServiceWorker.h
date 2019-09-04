@@ -45,6 +45,7 @@ public:
 	}
 
 	virtual ~linberServiceWorker(){
+		linber_destroy_worker(file_str);
 		free(service_uri);
 		service_uri = NULL;
 	}
