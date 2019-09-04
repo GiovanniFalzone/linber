@@ -157,14 +157,12 @@ class linberClient {
 	void linber_end_operation(){
 		if((request_state == 1) || (request_shm_state == 0 || request_shm_state == 1)){	// only request
 			response = NULL;
-			linber_request_service_clean(request, request_shm_mode, response, response_shm_mode);
-			request = NULL;
+			linber_request_service_clean(response, response_shm_mode);
 			request_state = 0;
 			request_shm_state = -1;
 		} else if((request_state == 2) || (request_shm_state == 2)){	// completed
-			linber_request_service_clean(request, request_shm_mode, response, response_shm_mode);
+			linber_request_service_clean(response, response_shm_mode);
 			response = NULL;
-			request = NULL;
 			request_state = 0;
 			request_shm_state = -1;
 		}

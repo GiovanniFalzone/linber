@@ -32,9 +32,9 @@ char* attach_shm_from_key(key_t key, int len, int *id);
 int linber_init();
 int linber_exit();
 
-//---------------------------------------------------------------------------------
-// Server operations
-//---------------------------------------------------------------------------------
+/*---------------------------------------------------------------------------------------------
+	Server operations
+---------------------------------------------------------------------------------------------*/
 int linber_register_service(	char *service_uri,					\
 								unsigned int uri_len,				\
 								unsigned int exec_time,				\
@@ -75,7 +75,6 @@ int linber_end_job_service_shm(	char *service_uri, 				\
 								unsigned int worker_id,			\
 								char *request, 					\
 								boolean request_shm,			\
-								char *response, 				\
 								int response_len, 				\
 								key_t response_key				\
 							);
@@ -84,11 +83,10 @@ void linber_destroy_worker(char *file_str);
 
 int linber_destroy_service(char *service_uri, unsigned int uri_len, unsigned long service_token);
 
-//---------------------------------------------------------------------------------
-// Client operations
-//---------------------------------------------------------------------------------
-
-void linber_request_service_clean(char *request, boolean shm_request_mode, char *response, boolean shm_response_mode );
+/*---------------------------------------------------------------------------------------------
+	Client operations
+---------------------------------------------------------------------------------------------*/
+void linber_request_service_clean(char *response, boolean shm_response_mode);
 
 int linber_system_status(system_status *system);
 

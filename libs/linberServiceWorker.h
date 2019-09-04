@@ -91,7 +91,6 @@ public:
 				execute_job();
 			}
 
-// always execute end job, also if it is a spurious job, needed to free the request memory
 			ret = linber_end_job_service(	service_uri,			\
 											uri_len,				\
 											service_token,			\
@@ -101,6 +100,7 @@ public:
 											response,				\
 											response_len			\
 										);
+			free(response);
 		}
 		printf("Worker %d died\n", worker_id);
 	}

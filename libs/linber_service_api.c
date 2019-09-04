@@ -58,7 +58,17 @@ int ioctl_send(unsigned int cmd, void* param){
 	return ret;
 }
 
-//------------------------------------------------
+/*---------------------------------------------------------------------------------------------
+	Server operations
+---------------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+	Create a service that uses kernel buffer memory to store the response.
+	With a maximum number of workers.
+	For Real Time requests will use the period and budget passed here as parameters.
+	To operate on the service this function store in the token pointer the token of the service
+	each worker have to use this token.
+	The time parameters are considered in milliseconds and converted in nanoseconds
+---------------------------------------------------------------------------------------------*/
 int linber_register_service(	char *service_uri,					\
 								unsigned int uri_len,				\
 								unsigned int exec_time,				\
@@ -92,6 +102,12 @@ int linber_register_service(	char *service_uri,					\
 	return ret;
 }
 
+/*---------------------------------------------------------------------------------------------
+	Register a worker for the service identified by the uri string, needs to pass the
+	service token received during service registration.
+	Create a file in /tmp associated with the service and the worker in order to create a 
+	unique key in case of response in shared memory.
+---------------------------------------------------------------------------------------------*/
 int linber_register_service_worker(	char *service_uri,				\
 									unsigned int uri_len,			\
 									unsigned long service_token,	\
@@ -107,7 +123,7 @@ int linber_register_service_worker(	char *service_uri,				\
 	param.op_params.register_worker.service_token = service_token;
 	ret = ioctl_send(IOCTL_REGISTER_SERVICE_WORKER, &param);
 
-	if(ret >= 0){
+	if(ret == 0){
 		if(*worker_id > 99){
 			return LINBER_KILL_WORKER;
 		}
@@ -124,6 +140,9 @@ int linber_register_service_worker(	char *service_uri,				\
 	return ret;
 }
 
+/*---------------------------------------------------------------------------------------------
+	destroy procedure when the worker ends
+---------------------------------------------------------------------------------------------*/
 void linber_destroy_worker(char *file_str){
 	if(remove(file_str) == 0){
 		printf("worker destroyied\n"); 
@@ -133,8 +152,10 @@ void linber_destroy_worker(char *file_str){
 	free(file_str);
 }
 
-//------------------------------------------------------
-char *create_shm_from_key(key_t key, int len, int *id){
+/*---------------------------------------------------------------------------------------------
+	Create a shared memory, return the address and id of the shared memory
+---------------------------------------------------------------------------------------------*/
+inline char *create_shm_from_key(key_t key, int len, int *id){
 //	struct shmid_ds shmid_ds;
 	char* shm;
 	if((*id = shmget(key, len, IPC_CREAT | 0666)) >= 0) {
@@ -168,6 +189,9 @@ char *create_shm_from_key(key_t key, int len, int *id){
 	return shm;
 }
 
+/*---------------------------------------------------------------------------------------------
+	Used to create a shared memory starting from a dedicated worker file in /tmp and a low id
+---------------------------------------------------------------------------------------------*/
 char *create_shm_from_filepath(char* file_str, int low_id, int len, key_t *key, int *id){
 	low_id = (low_id + 1)%255;
 	if((*key = ftok(file_str, low_id)) == (key_t) -1) {
@@ -199,7 +223,15 @@ char* attach_shm_from_key(key_t key, int len, int *id){
 	}
 	return shm;
 }
-//------------------------------------------------------
+
+/*---------------------------------------------------------------------------------------------
+	Send a request to the service identified by uri, pass a request that will be copied in a 
+	kernel buffer.
+	Is a blocking procedure and will return the response in shared memory or in the response
+	buffer.
+	The relative deadline is considered in milliseconds and then converted in nanoseconds,
+	if 0 then a best effort policy will be applied for the request.
+---------------------------------------------------------------------------------------------*/
 int linber_request_service(	char *service_uri,				\
 							unsigned int uri_len,			\
 							unsigned int rel_deadline_ms,	\
@@ -254,7 +286,8 @@ int linber_request_service(	char *service_uri,				\
 			if(response == NULL){
 				return LINBER_REQUEST_FAILED;				
 			}
-			shmctl(response_shm_id, IPC_RMID, NULL);	// self destroy
+// self destroy when the client will detach the response the shared memory will be destroied
+			shmctl(response_shm_id, IPC_RMID, NULL);
 		} else {
 			*response = (char*)malloc(*response_len);
 			if(response != NULL){
@@ -268,6 +301,13 @@ int linber_request_service(	char *service_uri,				\
 	return ret;
 }
 
+/*---------------------------------------------------------------------------------------------
+	Send a request to the service identified by uri, pass a request in shared memory
+	Is a blocking procedure and will return the response in shared memory or in the response
+	buffer.
+	The relative deadline is considered in milliseconds and then converted in nanoseconds,
+	if 0 then a best effort policy will be applied for the request.
+---------------------------------------------------------------------------------------------*/
 int linber_request_service_shm(	char *service_uri,				\
 								unsigned int uri_len,			\
 								unsigned int rel_deadline_ms,	\
@@ -323,7 +363,8 @@ int linber_request_service_shm(	char *service_uri,				\
 			if(response == NULL){
 				return LINBER_REQUEST_FAILED;				
 			}
-			shmctl(response_shm_id, IPC_RMID, NULL);	// self destroy
+// self destroy when the client will detach the response the shared memory will be destroied
+			shmctl(response_shm_id, IPC_RMID, NULL);
 		} else {
 			*response = (char*)malloc(*response_len);
 			if(response != NULL){
@@ -337,6 +378,14 @@ int linber_request_service_shm(	char *service_uri,				\
 	return ret;
 }
 
+/*---------------------------------------------------------------------------------------------
+	Send a request to the service identified by uri, pass a request that will be copied in a 
+	kernel buffer.
+	Is a NON blocking procedure and return the token associated with the request in the token_ptr.
+	The relative deadline is considered in milliseconds and then converted in nanoseconds,
+	if 0 then a best effort policy will be applied for the request.
+	Call the linber_request_service_get_response to retrieve the response
+---------------------------------------------------------------------------------------------*/
 int linber_request_service_no_blocking(	char *service_uri, 				\
 										unsigned int uri_len, 			\
 										unsigned int rel_deadline_ms,	\
@@ -378,6 +427,13 @@ int linber_request_service_no_blocking(	char *service_uri, 				\
 	return ret;
 }
 
+/*---------------------------------------------------------------------------------------------
+	Send a request to the service identified by uri, pass a request in shared memory.
+	Is a NON blocking procedure and return the token associated with the request in the token_ptr.
+	The relative deadline is considered in milliseconds and then converted in nanoseconds,
+	if 0 then a best effort policy will be applied for the request.
+	Call the linber_request_service_get_response to retrieve the response.
+---------------------------------------------------------------------------------------------*/
 int linber_request_service_no_blocking_shm(	char *service_uri, 				\
 											unsigned int uri_len, 			\
 											unsigned int rel_deadline_ms,	\
@@ -421,6 +477,11 @@ int linber_request_service_no_blocking_shm(	char *service_uri, 				\
 	return ret;
 }
 
+/*---------------------------------------------------------------------------------------------
+	Retrieve the response associated to the request with the passed token and deadline.
+	It is a blocking procedure.
+	Will return a response in shared memory or in a user space memory buffer.
+---------------------------------------------------------------------------------------------*/
 int linber_request_service_get_response(	char *service_uri, 					\
 											unsigned int uri_len,				\
 											char **response, 					\
@@ -453,7 +514,8 @@ int linber_request_service_get_response(	char *service_uri, 					\
 			if(response == NULL){
 				return LINBER_REQUEST_FAILED;				
 			}
-			shmctl(response_shm_id, IPC_RMID, NULL);	// self destroy
+// self destroy when the client will detach the response the shared memory will be destroied
+			shmctl(response_shm_id, IPC_RMID, NULL);
 		} else {
 			*response = (char*)malloc(*response_len);
 			if(response != NULL){
@@ -467,16 +529,11 @@ int linber_request_service_get_response(	char *service_uri, 					\
 	return ret;
 }
 
-void linber_request_service_clean(char *request, boolean shm_request_mode, char *response, boolean shm_response_mode ){
-	if(shm_request_mode){
-		#ifdef DEBUG
-			printf("request in shared memory detached\n");
-		#endif
-		detach_shm(request);
-	} else {
-		free(request);
-	}
-
+/*---------------------------------------------------------------------------------------------
+	Call this after using the response. It will clean the created buffers or the shared
+	memory associated with the response.
+---------------------------------------------------------------------------------------------*/
+void linber_request_service_clean(char *response, boolean shm_response_mode){
 	if(shm_response_mode){
 		#ifdef DEBUG
 			printf("response in shared memory detached\n");
@@ -487,7 +544,11 @@ void linber_request_service_clean(char *request, boolean shm_request_mode, char 
 	}
 }
 
-//-----------------------------------------------------------------------
+/*---------------------------------------------------------------------------------------------
+	It is a blocking procedure, blocks the worker waiting for requests.
+	Return a negative value in case of errors, pls kill the worker in that case.
+	Will pass the request in the request pointer as user space memory buffer or shared memory 
+---------------------------------------------------------------------------------------------*/
 int linber_start_job_service(	char *service_uri, 								\
 								unsigned int uri_len,							\
 								unsigned long service_token,					\
@@ -508,7 +569,7 @@ int linber_start_job_service(	char *service_uri, 								\
 	param.op_params.start_job.ptr_request_shm_mode = request_shm_mode;
 	param.op_params.start_job.data.ptr_request_key = &request_key;
 	ret = ioctl_send(IOCTL_START_JOB_SERVICE, &param);
-	if(ret >= 0){
+	if(ret == 0){
 		if(*request_shm_mode){
 			#ifdef DEBUG
 				printf("request in shared memory, key:%d\n", request_key);
@@ -538,6 +599,11 @@ int linber_start_job_service(	char *service_uri, 								\
 	return ret;
 }
 
+/*---------------------------------------------------------------------------------------------
+	End Job, pass the response in user space memory buffer to the module.
+	Call always after a Start job and after have used the request, will clean the memory used
+	to store the request.
+---------------------------------------------------------------------------------------------*/
 int linber_end_job_service(	char *service_uri, 				\
 							unsigned int uri_len,			\
 							unsigned long service_token,	\
@@ -564,7 +630,6 @@ int linber_end_job_service(	char *service_uri, 				\
 	} else {
 		free(request);
 	}
-	free(response);
 
 	switch(ret){
 		case LINBER_KILL_WORKER:
@@ -578,13 +643,17 @@ int linber_end_job_service(	char *service_uri, 				\
 	return ret;
 }
 
+/*---------------------------------------------------------------------------------------------
+	End Job, pass the response in shared memory to the module.
+	Call always after a Start job and after have used the request, will clean the memory used
+	to store the request.
+---------------------------------------------------------------------------------------------*/
 int linber_end_job_service_shm(	char *service_uri, 				\
 								unsigned int uri_len,			\
 								unsigned long service_token,	\
 								unsigned int worker_id,			\
 								char *request, 					\
 								boolean request_shm,			\
-								char *response, 				\
 								int response_len, 				\
 								key_t response_key				\
 							){
@@ -606,7 +675,6 @@ int linber_end_job_service_shm(	char *service_uri, 				\
 	} else {
 		free(request);
 	}
-	detach_shm(response);
 
 	switch(ret){
 		case LINBER_KILL_WORKER:
@@ -619,6 +687,9 @@ int linber_end_job_service_shm(	char *service_uri, 				\
 	return ret;
 }
 
+/*---------------------------------------------------------------------------------------------
+	Start the destroying procedure
+---------------------------------------------------------------------------------------------*/
 int linber_destroy_service(char *service_uri, unsigned int uri_len, unsigned long service_token){
 	int ret = 0;
 	linber_service_struct param;
@@ -629,6 +700,9 @@ int linber_destroy_service(char *service_uri, unsigned int uri_len, unsigned lon
 	return ret;
 }
 
+/*---------------------------------------------------------------------------------------------
+	Receive the system status and the status of each service in the system_status structure pointer
+---------------------------------------------------------------------------------------------*/
 int linber_system_status(system_status *system){
 	int ret = 0;
 	ret = ioctl_send(IOCTL_SYSTEM_STATUS, system);
