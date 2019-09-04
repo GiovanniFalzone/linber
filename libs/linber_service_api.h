@@ -19,8 +19,8 @@
 #define LINBER_SHM_ERROR			-3
 
 //----------------------
-#define DEBUG
-#define DEBUG_MESSAGE
+//#define DEBUG
+//#define DEBUG_MESSAGE
 //----------------------
 
 
