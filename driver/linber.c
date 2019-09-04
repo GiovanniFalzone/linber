@@ -1,7 +1,14 @@
-/*
-*/
-#include <linux/kernel.h>	/* Needed for KERN_ERR */
-#include <linux/module.h>	/* Needed by all modules */
+/*---------------------------------------------------------------------------------------------
+	Linber is a RPC/IPC framework with RealTime features, it allow to:
+	1) register a service with unique string identifier
+	2) register workers that will serve the incoming request for the service
+	3) express the CBS parameter (Period and budget) related to the each worker
+	4) apply a RealTime policy using SCHED_DEADLINE or a BestEffort policy for each request
+	5) request a service identified by the unique string identifier
+---------------------------------------------------------------------------------------------*/
+
+#include <linux/kernel.h>
+#include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
@@ -11,10 +18,6 @@
 #include <linux/device.h>
 #include <linux/ioctl.h>
 #include <linux/random.h>
-#include <linux/kthread.h>
-
-#include <linux/delay.h>
-
 #include <linux/sched.h>
 
 #include "../libs/linber_ioctl.h"
@@ -31,30 +34,8 @@
 #define DEBUG_MODULE
 #define DEBUG_RT
 
-static int dev_major;
-static struct class* 	dev_class	= NULL; ///< The device-driver class struct pointer
-static struct device* 	dev_device = NULL; ///< The device-driver device struct pointer
 
 static struct linber_struct linber;
-
-static int		dev_open(struct inode *n, struct file *f) {
-	try_module_get(THIS_MODULE);
-	return 0;
-}
-
-static int		dev_release(struct inode *n, struct file *f) {
-	module_put(THIS_MODULE);
-	return 0;
-}
-
-static ssize_t	dev_read(struct file *f, char *buf, size_t sz, loff_t *off) {
-	return 0;
-}
-
-static ssize_t	dev_write(struct file *f, const char *buf, size_t sz, loff_t *off) {
-	return	0;
-}
-
 
 /*---------------------------------------------------------------------------------------------
 	Create, initialize and return a new RequestNode allocated in Dynamic memory
@@ -63,7 +44,6 @@ static ssize_t	dev_write(struct file *f, const char *buf, size_t sz, loff_t *off
 static inline RequestNode* create_Request(void){
 	RequestNode *req_node = kmalloc(sizeof(*req_node) ,GFP_KERNEL);
 	if(req_node != NULL){
-		req_node->request_accepted = false;
 		req_node->result_cmd = LINBER_ABORT_REQUEST;	// if not fixed will be aborted	
 		sema_init(&req_node->Request_sem, 0);
 	}
@@ -79,6 +59,40 @@ static inline void destroy_request(RequestNode *req_node){
 	req_node->result_cmd = LINBER_ABORT_REQUEST;
 	up(&req_node->Request_sem);	// wake up client
 }
+
+/*---------------------------------------------------------------------------------------------
+	Find the request with the token in the completed queue of the ServiceNode
+	return the RequestNode or NULL if the riquest is not found
+---------------------------------------------------------------------------------------------*/
+static RequestNode* get_Completed_Request(ServiceNode *ser_node, unsigned long token){
+	RequestNode *req_node = NULL, *next;
+	mutex_lock(&ser_node->service_mutex);
+	list_for_each_entry_safe(req_node, next, &ser_node->Completed_RequestsHead, list){
+		if(req_node->token == token){	
+			list_del(&req_node->list);
+			break;
+		}
+	}
+	mutex_unlock(&ser_node->service_mutex);
+	return req_node;
+}
+
+
+/*---------------------------------------------------------------------------------------------
+	Remove and return the Request from the incoming sorted tree
+	return NULL if there aren't request
+---------------------------------------------------------------------------------------------*/
+static RequestNode* get_request(ServiceNode* ser_node){
+	RequestNode* req_node = NULL;
+	req_node = Remove_first_request(&ser_node->Requests_rbtree);
+	if(req_node != NULL){
+		ser_node->Request_count--;
+	} else {
+		printk(KERN_INFO "linber::  No pending request for service: %s\n", ser_node->uri);
+	}
+	return req_node;
+}
+
 
 /*---------------------------------------------------------------------------------------------
 	Find and return the RequestNode correspondig to the passed deadline and token.
@@ -115,6 +129,53 @@ static RequestNode* find_Waiting_or_Completed_Request(ServiceNode* ser_node, uns
 		}
 	}
 	mutex_unlock(&ser_node->service_mutex);
+	return req_node;
+}
+
+/*---------------------------------------------------------------------------------------------
+	Add the request to the service
+	1) create the request and link the request passed as shared memory key or pointer to kernel buffer
+	2) insert the request with a unique token in the incoming RBtree sorted by absolute deadline
+	3) wake-up a waiting worker
+	4) if it is a blocking procedure block on the request semaphore
+	return the RequestNode when the worker finish serving the request or immediatly if no bblocking
+---------------------------------------------------------------------------------------------*/
+static RequestNode* enqueue_request_for_service(	ServiceNode *ser_node, 			\
+													char *request,					\
+													unsigned int request_len,		\
+													bool blocking,					\
+													bool shm_mode,					\
+													key_t req_key,					\
+													unsigned long abs_deadline_ns	\
+													){
+	RequestNode *req_node;
+	req_node = create_Request();
+	if(req_node != NULL){
+		req_node->token = ser_node->next_req_token++;
+		req_node->abs_deadline_ns = abs_deadline_ns;
+		if(shm_mode){
+			req_node->request_shm_mode = true;
+			req_node->request.shm_key = req_key;
+		} else {
+			req_node->request_shm_mode = false;
+			req_node->request.data = request;
+		}
+		req_node->request_len = request_len;
+
+		mutex_lock(&ser_node->service_mutex);
+			if(!Insert_ReqNode_Sorted_by_Deadline(&ser_node->Requests_rbtree, req_node)){
+				mutex_unlock(&ser_node->service_mutex);
+				destroy_request(req_node);
+				return NULL;
+			}
+			ser_node->Request_count++;
+		mutex_unlock(&ser_node->service_mutex);
+
+		up(&ser_node->Workers.sem_for_request);
+		if(blocking){
+			down_interruptible(&req_node->Request_sem);
+		}
+	}
 	return req_node;
 }
 
@@ -166,7 +227,7 @@ static void destroy_service(ServiceNode *ser_node){
 	ser_node->destroy_me = true;
 
 	if(ser_node->Workers.count_registered <= 0){
-		clean_service(ser_node);
+		clean_service(ser_node);	// will free the unlock and destroy ser_node
 	} else {
 		mutex_unlock(&ser_node->service_mutex);
 	}
@@ -242,78 +303,19 @@ static inline ServiceNode* findService(char *uri){
 	return ser_node;
 }
 
-
-
-static RequestNode* enqueue_request_for_service(	ServiceNode *ser_node, 			\
-													char *request,					\
-													unsigned int request_len,		\
-													bool blocking,					\
-													bool shm_mode,					\
-													key_t req_key,					\
-													unsigned long abs_deadline_ns	\
-													){
-	RequestNode *req_node;
-	req_node = create_Request();
-	if(req_node != NULL){
-		req_node->token = ser_node->next_req_token++;
-		req_node->abs_deadline_ns = abs_deadline_ns;
-		if(shm_mode){
-			req_node->request_shm_mode = true;
-			req_node->request.shm_key = req_key;
-		} else {
-			req_node->request_shm_mode = false;
-			req_node->request.data = request;
-		}
-		req_node->request_len = request_len;
-
-		mutex_lock(&ser_node->service_mutex);
-			if(!Insert_ReqNode_Sorted_by_Deadline(&ser_node->Requests_rbtree, req_node)){
-				mutex_unlock(&ser_node->service_mutex);
-				destroy_request(req_node);
-				return NULL;
-			}
-			ser_node->Request_count++;
-			req_node->request_accepted = true;
-		mutex_unlock(&ser_node->service_mutex);
-
-		up(&ser_node->Workers.sem_for_request);
-		if(blocking){
-			down_interruptible(&req_node->Request_sem);
-		}
-	}
-	return req_node;
-}
-
-static RequestNode* get_Completed_Request(ServiceNode *ser_node, unsigned long token){
-	RequestNode *req_node = NULL, *next;
+/*---------------------------------------------------------------------------------------------
+	decrease the number of registered worker, called on worker failure
+---------------------------------------------------------------------------------------------*/
+static inline void decrease_workers(ServiceNode *ser_node){
 	mutex_lock(&ser_node->service_mutex);
-	list_for_each_entry_safe(req_node, next, &ser_node->Completed_RequestsHead, list){
-		if(req_node->token == token){	
-			list_del(&req_node->list);
-			break;
-		}
-	}
+	ser_node->Workers.count_registered--;
 	mutex_unlock(&ser_node->service_mutex);
-	return req_node;
 }
 
-static RequestNode* get_request(ServiceNode* ser_node){
-	RequestNode* req_node = NULL;
-	req_node = Remove_first_request(&ser_node->Requests_rbtree);
-	if(req_node != NULL){
-		ser_node->Request_count--;
-		if(!req_node->request_accepted){
-			kfree(req_node->request.data);
-			kfree(req_node->response.data);
-			kfree(req_node);
-			return NULL;
-		}
-	} else {
-		printk(KERN_INFO "linber::  No pending request for service: %s\n", ser_node->uri);
-	}
-	return req_node;
-}
-
+/*---------------------------------------------------------------------------------------------
+	get the worker struct of the service associated with the worked_id
+	return NULL if the worker id is not valid or if the process asking for the worker it isn't the worker
+---------------------------------------------------------------------------------------------*/
 static worker_struct* get_worker_by_id(ServiceNode *ser_node, unsigned int worker_id){
 	worker_struct *worker = NULL;
 	if((worker_id >= 0) && (worker_id < ser_node->Workers.Max_Workers)){
@@ -328,36 +330,45 @@ static worker_struct* get_worker_by_id(ServiceNode *ser_node, unsigned int worke
 	return worker;
 }
 
-static inline void decrease_workers(ServiceNode *ser_node){
-	mutex_lock(&ser_node->service_mutex);
-	ser_node->Workers.count_registered--;
-	mutex_unlock(&ser_node->service_mutex);
-}
-
-static int Service_check_Worker(ServiceNode *ser_node, unsigned long service_token, int worker_id){
-	if((ser_node->token == service_token) && (worker_id >= 0)){
-		return 1;
+/*---------------------------------------------------------------------------------------------
+	check if the worker has rights on ServingNode
+---------------------------------------------------------------------------------------------*/
+static inline bool Service_check_Worker(ServiceNode *ser_node, unsigned long service_token, int worker_id){
+	if((worker_id >= 0) && (worker_id < ser_node->Workers.Max_Workers)){
+		if((ser_node->token == service_token)){
+			return true;
+		}
 	}
 	printk(KERN_ERR "linber:: Wrong service id %lu or worker id %d for service: %s\n", service_token, worker_id, ser_node->uri);
-	return 0;
+	return false;
 }
 
-static int Service_check_alive(ServiceNode *ser_node){
+/*---------------------------------------------------------------------------------------------
+	check if the service is still alive or the destruction procedure is started
+	if the calling worker is the last one then complete the service destruction procedure
+---------------------------------------------------------------------------------------------*/
+static bool Service_check_alive(ServiceNode *ser_node){
 	mutex_lock(&ser_node->service_mutex);
 		if(ser_node->destroy_me){	// check if must be destroied
 			ser_node->Workers.count_registered--;
 			if(ser_node->Workers.count_registered <= 0){
-				clean_service(ser_node);
-				return -1;
+				clean_service(ser_node);	// will free the unlock and destroy ser_node
+				return false;
 			} else {
 				mutex_unlock(&ser_node->service_mutex);
-				return -1;
+				return false;
 			}
 		}
 	mutex_unlock(&ser_node->service_mutex);
-	return 0;
+	return true;
 }
 
+/*---------------------------------------------------------------------------------------------
+	check if there are waiting requests.
+	If the incoming request queue is empty then the worker is blocked on the wait for request semaphore
+	return the first waiting RequestNode
+	If the worker process is woke up by a signal instead by an incoming request then return NULL
+---------------------------------------------------------------------------------------------*/
 static RequestNode* worker_wait_for_request(ServiceNode *ser_node, unsigned int worker_id){
 	RequestNode *req_node = NULL;
 	worker_struct *worker = NULL;
@@ -375,7 +386,7 @@ static RequestNode* worker_wait_for_request(ServiceNode *ser_node, unsigned int 
 
 	down_interruptible(&ser_node->Workers.sem_for_request);		// wait for request
 
-	if(Service_check_alive(ser_node) >= 0){
+	if(Service_check_alive(ser_node)){
 		mutex_lock(&ser_node->service_mutex);
 		req_node = get_request(ser_node);
 		if(req_node != NULL){
@@ -386,7 +397,11 @@ static RequestNode* worker_wait_for_request(ServiceNode *ser_node, unsigned int 
 	return req_node;
 }
 
-static RequestNode* worker_get_request(ServiceNode *ser_node, unsigned int worker_id){
+/*---------------------------------------------------------------------------------------------
+	return the RequestNode associated with the worker
+	return NULL with wrong service node, wrong worker id or worker request is empty
+---------------------------------------------------------------------------------------------*/
+static inline RequestNode* worker_get_request(ServiceNode *ser_node, unsigned int worker_id){
 	RequestNode *req_node = NULL;
 	worker_struct *worker = NULL;
 	worker = get_worker_by_id(ser_node, worker_id);
@@ -396,6 +411,10 @@ static RequestNode* worker_get_request(ServiceNode *ser_node, unsigned int worke
 	return req_node;
 }
 
+/*---------------------------------------------------------------------------------------------
+	called by worker when finished serving the request, insert the request in the completed queue
+	and wake-up the blocked client
+---------------------------------------------------------------------------------------------*/
 static void move_from_worker_to_completed(ServiceNode *ser_node, unsigned int worker_id){	
 	RequestNode *req_node = NULL;
 	worker_struct *worker = NULL;
@@ -411,7 +430,60 @@ static void move_from_worker_to_completed(ServiceNode *ser_node, unsigned int wo
 	mutex_unlock(&ser_node->service_mutex);
 	up(&req_node->Request_sem);	// end job
 }
-//------------------------------------------------------
+
+//---------------------------------------------------------------------------------------------
+/*---------------------------------------------------------------------------------------------
+	Set BestEffort policy for the current process
+---------------------------------------------------------------------------------------------*/
+static void Dispatch_as_BestEffort(void){
+	int res;
+	struct sched_attr attr;
+	attr.size = sizeof(struct sched_attr);
+	attr.sched_flags = SCHED_FLAG_RESET_ON_FORK;
+	attr.sched_policy = SCHED_FIFO;		// SCHED_NORMAL
+	attr.sched_nice = 0;				// -20
+	attr.sched_priority = 99;			// 0
+	attr.sched_runtime = 0;
+	attr.sched_period = attr.sched_deadline = 0;
+	res = sched_setattr(current, &attr);
+	if (res < 0){
+		printk(KERN_INFO "Linber:: Error %i setting Best Effort scheduling\n", res);
+	} else {
+		#ifdef DEBUG_MODULE
+			printk(KERN_INFO "Linber:: Dispatched as Best Effort\n");
+		#endif
+	}
+}
+
+/*---------------------------------------------------------------------------------------------
+	Set SCHED_DEADLINE policy with period, runtime and deadline for the current process
+---------------------------------------------------------------------------------------------*/
+static int Dispatch_as_RealTime(unsigned long exec_time_ns, unsigned long period_ns, unsigned long rel_deadline_ns){
+	int res;
+	struct sched_attr attr;
+	attr.size = sizeof(struct sched_attr);
+	attr.sched_flags = 0;//SCHED_FLAG_RECLAIM | SCHED_FLAG_RESET_ON_FORK;
+	attr.sched_policy = SCHED_DEADLINE;
+	attr.sched_nice = 0;
+	attr.sched_priority = 0;
+	attr.sched_runtime = exec_time_ns;
+	attr.sched_period = period_ns;
+	attr.sched_deadline = rel_deadline_ns;
+	res = sched_setattr(current, &attr);
+	if (res < 0){
+		printk(KERN_INFO "Linber:: SCHED_DEADLINE FAULT %i with Q:%lu P:%lu D:%lu\n", res, exec_time_ns/1000000, period_ns/1000000, rel_deadline_ns/1000000);
+	} else {
+		#ifdef DEBUG_RT
+			printk(KERN_INFO "Linber:: Dispatched as RealTime Q:%lu P:%lu D:%lu\n", exec_time_ns/1000000, period_ns/1000000, rel_deadline_ns/1000000);
+		#endif
+	}
+	return res;
+}
+
+//---------------------------------------------------------------------------------------------
+/*---------------------------------------------------------------------------------------------
+	directly call from ioctl, check if the service is unique and create it
+---------------------------------------------------------------------------------------------*/
 static int linber_register_service(linber_service_struct *obj){
 	ServiceNode *ser_node;
 	ser_node = findService(obj->service_uri);
@@ -427,6 +499,20 @@ static int linber_register_service(linber_service_struct *obj){
 	}
 }
 
+/*---------------------------------------------------------------------------------------------
+	directly called from ioctl, request a service
+	1) 	INIT, copy and check the data from User space
+		1.1)	enqueue request, if blocking the Client is blocked here and will wake up by the worker
+				and continue directly with phase request COMPLETED 3)
+		1.2)	if no blocking then return the request token, the client must call again this ioctl passing
+				the waiting code and the request token
+	2)	WAITING
+		2.1)	copy the token from U.S. and find the request associated with the token in the
+				waiting queue, serving slots and completed queue, if not completed block the client here
+				else continue with phase COMPLETED 3)
+
+	3)	COMPLETED, copy the response to the user space
+---------------------------------------------------------------------------------------------*/
 static int linber_request_service(linber_service_struct *obj){
 	RequestNode *req_node = NULL;
 	ServiceNode *ser_node = NULL;
@@ -484,6 +570,9 @@ static int linber_request_service(linber_service_struct *obj){
 				if(ret == LINBER_REQUEST_SUCCESS){	// copy response
 					CHECK_MEMORY_ERROR(put_user(req_node->response_len, obj->op_params.request.ptr_response_len));
 					CHECK_MEMORY_ERROR(put_user(req_node->response_shm_mode, obj->op_params.request.ptr_response_shm_mode));
+					if(req_node->response_shm_mode){	// response in shared memory
+						CHECK_MEMORY_ERROR(put_user(req_node->response.shm_key, obj->op_params.request.ptr_shm_response_key));
+					}
 				}
 			}
 		}
@@ -493,7 +582,11 @@ static int linber_request_service(linber_service_struct *obj){
 	return ret;
 }
 
-
+/*---------------------------------------------------------------------------------------------
+	Called by the Client, after the request_service call the client know the exact dimension
+	of the response and then call this passing the address where the kernell will copy the response
+	It is not needed with shared memory because client receive the shm key with the first request
+---------------------------------------------------------------------------------------------*/
 static int linber_request_service_get_response(linber_service_struct *obj){
 	int ret = 0;
 	unsigned long token;
@@ -505,9 +598,7 @@ static int linber_request_service_get_response(linber_service_struct *obj){
 		req_node = get_Completed_Request(ser_node, token);
 		if(req_node != NULL){
 			ret = req_node->result_cmd;
-			if(req_node->response_shm_mode){	// response in shared memory
-				CHECK_MEMORY_ERROR(put_user(req_node->response.shm_key, obj->op_params.request.ptr_shm_response_key));
-			} else {
+			if(!req_node->response_shm_mode){	// response in kernel buffer
 				CHECK_MEMORY_ERROR(copy_to_user(obj->op_params.request.ptr_response, req_node->response.data, req_node->response_len));
 				kfree(req_node->response.data);
 			}
@@ -524,53 +615,10 @@ static int linber_request_service_get_response(linber_service_struct *obj){
 	return ret;
 }
 
-
-static void Dispatch_as_BestEffort(void){
-	int res;
-	struct sched_attr attr;
-	attr.size = sizeof(struct sched_attr);
-	attr.sched_flags = SCHED_FLAG_RESET_ON_FORK;
-	attr.sched_policy = SCHED_FIFO;		// SCHED_NORMAL
-	attr.sched_nice = 0;				// -20
-	attr.sched_priority = 99;			// 0
-	attr.sched_runtime = 0;
-	attr.sched_period = attr.sched_deadline = 0;
-	res = sched_setattr(current, &attr);
-	if (res < 0){
-		printk(KERN_INFO "Linber:: Error %i setting Best Effort scheduling\n", res);
-	} else {
-		#ifdef DEBUG_MODULE
-			printk(KERN_INFO "Linber:: Dispatched as Best Effort\n");
-		#endif
-	}
-}
-
-//------------------
-// set as SCHED_DEADLINE with Service Period as period, Service Period as deadline and One request exec time as runtime
-//------------------
-static int Dispatch_as_RealTime(unsigned long exec_time_ns, unsigned long period_ns, unsigned long rel_deadline_ns){
-	int res;
-	struct sched_attr attr;
-	attr.size = sizeof(struct sched_attr);
-	attr.sched_flags = 0;//SCHED_FLAG_RECLAIM | SCHED_FLAG_RESET_ON_FORK;
-	attr.sched_policy = SCHED_DEADLINE;
-	attr.sched_nice = 0;
-	attr.sched_priority = 0;
-	attr.sched_runtime = exec_time_ns;
-	attr.sched_period = period_ns;
-	attr.sched_deadline = rel_deadline_ns;
-	res = sched_setattr(current, &attr);
-	if (res < 0){
-		printk(KERN_INFO "Linber:: SCHED_DEADLINE FAULT %i with Q:%lu P:%lu D:%lu\n", res, exec_time_ns/1000000, period_ns/1000000, rel_deadline_ns/1000000);
-	} else {
-		#ifdef DEBUG_RT
-			printk(KERN_INFO "Linber:: Dispatched as RealTime Q:%lu P:%lu D:%lu\n", exec_time_ns/1000000, period_ns/1000000, rel_deadline_ns/1000000);
-		#endif
-	}
-	return res;
-}
-
-
+/*---------------------------------------------------------------------------------------------
+	Called by the worker at the initialization, return to u.s. the worker id and increment
+	the registered workers. Only Workers with the Service Token can serve for the Service
+---------------------------------------------------------------------------------------------*/
 static int linber_register_service_worker(linber_service_struct *obj){
 	ServiceNode *ser_node = findService(obj->service_uri);
 	int worker_id;
@@ -593,6 +641,14 @@ static int linber_register_service_worker(linber_service_struct *obj){
 	return 0;
 }
 
+/*---------------------------------------------------------------------------------------------
+	Called by worker, block the worker waiting for request when there are no waiting requests
+	When the worker get the first request then compute the relative deadline from the 
+	absolute deadline.
+	Apply a BestEffort scheduling policy if the deadline is expired or is at maximum value.
+	Apply SchedDeadline policy if the deadline is valid.
+	Copy to user space the request buffer if it is in kernel memory or just the shm key.
+---------------------------------------------------------------------------------------------*/
 static int linber_Start_Job(linber_service_struct *obj){
 	RequestNode *req_node = NULL;
 	ServiceNode *ser_node = findService(obj->service_uri);
@@ -643,6 +699,12 @@ static int linber_Start_Job(linber_service_struct *obj){
 	return 0;
 }
 
+/*---------------------------------------------------------------------------------------------
+	Called by the worker adter the start job in case the request is in kernel buffer.
+	After the First start job the worker know the request size, allocate the buffer in user space
+	and call this to get a copy of the request.
+	Is not needed in case of request in shared memory,
+---------------------------------------------------------------------------------------------*/
 static int linber_Start_Job_get_request(linber_service_struct *obj){
 	worker_struct *worker;
 	RequestNode *req_node;
@@ -677,6 +739,11 @@ static int linber_Start_Job_get_request(linber_service_struct *obj){
 }
 
 
+/*---------------------------------------------------------------------------------------------
+	Called by the worker when finish to serve a request.
+	If the response is in user buffer then copy the response in the kernel buffer.
+	If the response is in shared memory copy just the response shared memory key
+---------------------------------------------------------------------------------------------*/
 static int linber_End_Job(linber_service_struct *obj){
 	int worker_id;
 	unsigned long service_token;
@@ -718,6 +785,10 @@ static int linber_End_Job(linber_service_struct *obj){
 	return ret;
 }
 
+/*---------------------------------------------------------------------------------------------
+	Called by one worker, start the destroying service procedure that will be completed
+	by the last worker
+---------------------------------------------------------------------------------------------*/
 static int linber_destroy_service(linber_service_struct *obj){
 	ServiceNode *node;
 	node = findService(obj->service_uri);
@@ -730,6 +801,9 @@ static int linber_destroy_service(linber_service_struct *obj){
 	return -1;
 }
 
+/*---------------------------------------------------------------------------------------------
+	Used to receive all information related to services
+---------------------------------------------------------------------------------------------*/
 static int linber_get_system_status(void* system_user){
 	system_status system;
 	service_status *services;
@@ -767,7 +841,31 @@ static int linber_get_system_status(void* system_user){
 }
 
 
-//-------------------------------------------------------------
+/*---------------------------------------------------------------------------------------------
+	device functions
+---------------------------------------------------------------------------------------------*/
+static int		dev_open(struct inode *n, struct file *f) {
+	try_module_get(THIS_MODULE);
+	return 0;
+}
+
+static int		dev_release(struct inode *n, struct file *f) {
+	module_put(THIS_MODULE);
+	return 0;
+}
+
+static ssize_t	dev_read(struct file *f, char *buf, size_t sz, loff_t *off) {
+	return 0;
+}
+
+static ssize_t	dev_write(struct file *f, const char *buf, size_t sz, loff_t *off) {
+	return	0;
+}
+
+/*---------------------------------------------------------------------------------------------
+	device ioctl call dispatcher, copy the linber parameters structure from user space.
+	In a second step the called functions will copy the buffers from user space.
+---------------------------------------------------------------------------------------------*/
 static long	linber_ioctl(struct file *f, unsigned int ioctl_op, unsigned long ioctl_param){ 
 	long ret;
 	char *uri_tmp;
@@ -835,6 +933,9 @@ static int linber_uevent(struct device *dev, struct kobj_uevent_env *env){
 	return 0;
 }
 
+static int dev_major;
+static struct class* 	dev_class	= NULL; ///< The device-driver class struct pointer
+static struct device* 	dev_device = NULL; ///< The device-driver device struct pointer
 
 struct file_operations fops = {
 	.owner = THIS_MODULE,
@@ -845,6 +946,9 @@ struct file_operations fops = {
 	.unlocked_ioctl = linber_ioctl,
 };
 
+/*---------------------------------------------------------------------------------------------
+	Init module, create device file in /dev, initialize linber structure
+---------------------------------------------------------------------------------------------*/
 int init_module(void) {
 	int ret;
 	printk(KERN_INFO "linber:: Registering device %s\n", DEV_NAME);
@@ -883,6 +987,9 @@ int init_module(void) {
 	return 0;
 }
 
+/*---------------------------------------------------------------------------------------------
+	destroy all services if there are services
+---------------------------------------------------------------------------------------------*/
 void cleanup_module(void) {
 	ServiceNode *ser_node, *next;
 
@@ -904,4 +1011,4 @@ void cleanup_module(void) {
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Giovanni Falzone");
-MODULE_DESCRIPTION("");
+MODULE_DESCRIPTION("Linber RPC/IPC RT framework");

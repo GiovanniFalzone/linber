@@ -247,9 +247,6 @@ int linber_request_service(	char *service_uri,				\
 
 	if(ret == LINBER_REQUEST_SUCCESS){
 		if(*response_shm_mode) {
-			if((ret = ioctl_send(IOCTL_REQUEST_SERVICE_GET_RESPONSE, &param) < 0)){
-				return LINBER_REQUEST_FAILED;
-			}
 			#ifdef DEBUG
 				printf("response in shared memory, key:%d\n", response_key);
 			#endif
@@ -319,9 +316,6 @@ int linber_request_service_shm(	char *service_uri,				\
 
 	if(ret == LINBER_REQUEST_SUCCESS){
 		if(*response_shm_mode) {
-			if((ret = ioctl_send(IOCTL_REQUEST_SERVICE_GET_RESPONSE, &param) < 0)){
-				return LINBER_REQUEST_FAILED;
-			}
 			#ifdef DEBUG
 				printf("response in shared memory, key:%d\n", response_key);
 			#endif
@@ -452,9 +446,6 @@ int linber_request_service_get_response(	char *service_uri, 					\
 	ret = ioctl_send(IOCTL_REQUEST_SERVICE, &param);
 	if(ret == LINBER_REQUEST_SUCCESS){
 		if(*response_shm_mode) {
-			if((ret = ioctl_send(IOCTL_REQUEST_SERVICE_GET_RESPONSE, &param) < 0)){
-				return LINBER_REQUEST_FAILED;
-			}
 			#ifdef DEBUG
 				printf("response in shared memory, key:%d\n", response_key);
 			#endif
