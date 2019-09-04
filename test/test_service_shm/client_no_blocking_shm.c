@@ -8,6 +8,7 @@
 #include <sys/time.h>
 #include <signal.h>
 
+#define DEFAULT_MESSAGE "Hello World\0"
 
 #define DEFAULT_SERVICE_URI	"org.service\0"
 #define DEFAULT_CONCURRENT_REQUESTS	16
@@ -42,7 +43,7 @@ void *thread_job(void *args){
 	unsigned long passed_millis = 0;
 	int ret = 0;
 	unsigned long token, abs_deadline;
-	int request_len;
+	int request_len = strlen(DEFAULT_MESSAGE) + 1;
 	char *request;
 	key_t request_shm_key;
 	int request_shm_id;
@@ -51,14 +52,13 @@ void *thread_job(void *args){
 	boolean response_shm_mode;
 	static int low_id = 0;
 
-	request_len = strlen("ciao\0") + 1;
 	request = create_shm_from_filepath(".", low_id++, request_len, &request_shm_key, &request_shm_id);
 
 	if(request == NULL){
 		printf("Error in shared memory allocation\n");
 		return NULL;
 	}
-	strcpy(request, "ciao\0");
+	strcpy(request, DEFAULT_MESSAGE);
 	request[request_len-1] = '\0';
 
 	if(abort_request == 0){

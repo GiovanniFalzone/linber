@@ -8,6 +8,7 @@
 #include <sys/time.h>
 #include <signal.h>
 
+#define DEFAULT_MESSAGE "Hello World\0"
 
 #define DEFAULT_SERVICE_URI	"org.service\0"
 #define DEFAULT_CONCURRENT_REQUESTS	16
@@ -39,13 +40,13 @@ void *thread_job(void *args){
 	struct timeval start, end;
 	unsigned long passed_millis = 0;
 	int ret = 0;
-	int request_len = strlen("ciao\0") + 1;
+	int request_len = strlen(DEFAULT_MESSAGE) + 1;
 	char *request = malloc(request_len);	// request will be free by linber_request_service_clean
 	char *response;
 	int response_len;
 	boolean response_shm_mode;
 
-	strcpy(request, "ciao\0");
+	strcpy(request, DEFAULT_MESSAGE);
 	request[request_len-1] = '\0';
 
 	if(abort_request == 0){
