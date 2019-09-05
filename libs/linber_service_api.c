@@ -297,6 +297,8 @@ int linber_request_service(	char *service_uri,				\
 				ret = LINBER_REQUEST_FAILED;
 			}
 		}
+	} else {
+		*response = NULL;
 	}
 	return ret;
 }
@@ -374,6 +376,8 @@ int linber_request_service_shm(	char *service_uri,				\
 				ret = LINBER_REQUEST_FAILED;
 			}
 		}
+	} else {
+		*response = NULL;
 	}
 	return ret;
 }
@@ -525,6 +529,8 @@ int linber_request_service_get_response(	char *service_uri, 					\
 				ret = LINBER_REQUEST_FAILED;
 			}
 		}
+	} else {
+		*response = NULL;
 	}
 	return ret;
 }
