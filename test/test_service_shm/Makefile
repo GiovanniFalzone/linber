@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -pedantic
 LDLIBS = -pthread
-TARGET = server_shm client_blocking_shm client_no_blocking_shm client_efficiency_test_shm
+TARGET = server_shm client_blocking_shm client_no_blocking_shm
 
 SRCS = ../../libs/linber_service_api.c
 
@@ -12,7 +12,7 @@ DEPS += ../../libs/linber_ioctl.h
 all: $(TARGET)
 
 %: %.c $(DEPS) $(SRCS)
-	sudo $(CC) -o $@ $< $(SRCS) $(CFLAGS) $(LDLIBS) 
+	sudo $(CC) -o $@ $< $(SRCS) $(CFLAGS) $(LDLIBS)
 	sudo chmod u+s $@
 
 .PHONY:

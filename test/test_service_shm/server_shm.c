@@ -86,20 +86,24 @@ void *thread_job(void *args){
 					printf("Error in shared memory allocation\n");
 					break;
 				}
+				//-------------------------------------------------------------
+
+				//---------------------waste time------------------------------
+				if(worker.exec_time > 0){
+					gettimeofday(&start, NULL);
+					do{
+						gettimeofday(&end, NULL);
+						passed_millis = (end.tv_sec - start.tv_sec)*1000;
+						passed_millis = (end.tv_usec - start.tv_usec)*0.001;
+					} while(passed_millis < worker.exec_time);
+				}
+				//-------------------------------------------------------------
 
 				#ifdef DEBUG_MESSAGE
 					printf("thread id:%d job#:%d, serving request, %s %d\n", worker_id, job_num++, request, request_len);
 					memcpy(response, request, response_len);
 					printf("response: %s\n", response);
 				#endif
-				//-------------------------------------------------------------
-
-				gettimeofday(&start, NULL);
-				do{
-					gettimeofday(&end, NULL);
-					passed_millis = (end.tv_sec - start.tv_sec)*1000;
-					passed_millis = (end.tv_usec - start.tv_usec)*0.001;
-				} while(passed_millis < worker.exec_time);
 
 
 				ret = linber_end_job_service_shm(	service_uri,			\

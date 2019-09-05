@@ -1,6 +1,3 @@
-/*-------------------------------------------------------------------------------------------------------
-	This is a Client requesting a service with non blocking procedure, it pass the request as shared memory
---------------------------------------------------------------------------------------------------------*/
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,15 +6,20 @@
 #include "../../libs/linber_service_api.h"
 #include <time.h>
 
-#define DEFAULT_SERVICE_URI	"org.service\0"
+#define DEFAULT_SERVICE_URI			"org.service\0"
+#define RESULTS_FILE_NAME			"mem_eff_test_1B_to_1GB"
+//---------------------------------------------------------
 
 #define LABEL_SIZE "size\0"
 
 #define ITERATION_FOR_SAME_REQUEST	1000
-#define MAX_MULTIPLICATIONS			30									
-#define MAX_SIZE					1<<MAX_MULTIPLICATIONS				// Max size = 2^30 = 1GB
+#define MAX_MULTIPLICATIONS			20									
+#define MAX_SIZE					1<<MAX_MULTIPLICATIONS				// Max size = 2^20 = 1MB
 #define MAX_ROW						MAX_MULTIPLICATIONS + 1				// first row contain labels
 #define MAX_COLUMN					ITERATION_FOR_SAME_REQUEST + 1		// first column contain the size
+
+#define FILE_NAME 					RESULTS_FILE_NAME ".csv"
+
 
 char *service_uri;
 int uri_len;
@@ -31,37 +33,38 @@ unsigned int execute_request(unsigned int request_len){
 	int response_len;
 	struct timespec start, end;
 	unsigned long passed_nanos = 0;
-	key_t request_shm_key;
-	int request_shm_id;
-	static int low_id = 0;
 	int ret = 0;
 
-	request = create_shm_from_filepath(".", low_id++, request_len, &request_shm_key, &request_shm_id);
-
+	request = malloc(request_len);
 	if(request == NULL){
-		printf("Error in shared memory allocation\n");
-		return -1;	// return the maximum value
+		printf("Error: no memory\n");
+		return -1;
 	}
-
 	if(clock_gettime(CLOCK_MONOTONIC, &start) == -1){
 		perror("clock gettime error\n");
 	}
-
-	ret = linber_request_service_shm(	service_uri, uri_len,						\
-										0, request_shm_key, request_len,			\
-										&response, &response_len, &response_shm_mode);
-
-
+// blocking request, 0 as deadline so will use SCHED_FIFO with 99 as priority
+//----------------------measuring----------------------------------
+	ret = linber_request_service(	service_uri,				\
+									uri_len,					\
+									0,							\
+									request,					\
+									request_len,				\
+									&response,					\
+									&response_len,				\
+									&response_shm_mode			\
+								);
+//------------------end measuring----------------------------------
 	if(clock_gettime(CLOCK_MONOTONIC, &end) == -1){
 		perror("clock gettime error\n");
 	}
 
 	linber_request_service_clean(response, response_shm_mode);
-	detach_shm(request);
+	free(request);
 
 	if(ret < 0){
 		printf("aborted\n");
-		return -1;	// return a maximum value
+		return ret;
 	}
 
 	passed_nanos = SEC_TO_nSEC(end.tv_sec) - SEC_TO_nSEC(start.tv_sec);
@@ -87,14 +90,10 @@ void test_with_size(int row, unsigned int size){
 void save_in_csv(){
 	FILE *fp;
 	int i,j;
-    char file_name[64];
 	char str_num[8];
 	char labels[sizeof(LABEL_SIZE) + ITERATION_FOR_SAME_REQUEST*(5)];		// #001,#002,...#010,...#100...#1000
 
-    printf("\n Enter the filename :\n");
-	scanf("%[^\n]%*c", file_name);
-
-	fp = fopen(strcat(file_name, ".csv"), "w+");
+	fp = fopen(FILE_NAME, "w+");
 	strcpy(labels, LABEL_SIZE);
 	for(i=1; i<=(MAX_COLUMN-1); i++){
 		sprintf(str_num, ",#%d", i);
@@ -114,6 +113,7 @@ void save_in_csv(){
 	}
 	fclose(fp);
 }
+
 
 int main(int argc,char* argv[]){
 	unsigned int size = 1;
