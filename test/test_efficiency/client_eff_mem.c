@@ -7,13 +7,12 @@
 #include <time.h>
 
 #define DEFAULT_SERVICE_URI			"org.service\0"
-#define RESULTS_FILE_NAME			"mem_eff_test_1B_to_1GB"
+#define RESULTS_FILE_NAME			"mem_eff_test_1B_to_1MB"
+#define ITERATION_FOR_SAME_REQUEST	1000
+#define MAX_MULTIPLICATIONS			20									
 //---------------------------------------------------------
 
 #define LABEL_SIZE "size\0"
-
-#define ITERATION_FOR_SAME_REQUEST	1000
-#define MAX_MULTIPLICATIONS			20									
 #define MAX_SIZE					1<<MAX_MULTIPLICATIONS				// Max size = 2^20 = 1MB
 #define MAX_ROW						MAX_MULTIPLICATIONS + 1				// first row contain labels
 #define MAX_COLUMN					ITERATION_FOR_SAME_REQUEST + 1		// first column contain the size

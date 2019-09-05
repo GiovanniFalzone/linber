@@ -20,23 +20,14 @@ all: $(TARGET)
 	sudo chmod u+s $@
 
 .PHONY:
-execute_test: execute_test_mem execute_test_shm
-
-.PHONY:
 execute_test_mem:
-#	./../test_service/server org.service 1 0 && echo $$	
 	sudo nice -n -20 ./$(CLIENT_EFF_MEM)
-	sudo killall server org.service 1 0
+	sudo chmod 666 *.csv
 
 .PHONY:
 execute_test_shm:
-#	./../test_service_shm/server_shm org.service 1 0
 	sudo nice -n -20 ./$(CLIENT_EFF_SHM)
-	sudo killall server_shm org.service 1 0
-
-.PHONY:
-help:
-	@echo "[all] | [clean] | [execute_test]"
+	sudo chmod 666 *.csv
 
 .PHONY:
 clean:
