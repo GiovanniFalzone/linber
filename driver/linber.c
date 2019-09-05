@@ -635,6 +635,7 @@ static int linber_register_service_worker(linber_service_struct *obj){
 			mutex_unlock(&ser_node->service_mutex);
 			ser_node->Workers.worker_slots[worker_id].task = current;
 			CHECK_MEMORY_ERROR(put_user(worker_id, obj->op_params.register_worker.ptr_worker_id));
+			Dispatch_as_BestEffort();	// set current as SCHED_FIFO 99
 		}
 	} else {
 		return -1;
@@ -768,7 +769,8 @@ static int linber_End_Job(linber_service_struct *obj){
 				} else {
 					if((req_node->response_len > LINBER_MAX_MEM_SIZE)){
 						req_node->result_cmd = LINBER_REQUEST_FAILED;
-						ret = LINBER_PAYLOAD_SIZE_ERROR;
+						move_from_worker_to_completed(ser_node, worker_id);
+						return LINBER_PAYLOAD_SIZE_ERROR;
 					} else {
 						CHECK_KMALLOC_ERROR(req_node->response.data = kmalloc(req_node->response_len, GFP_KERNEL));
 						CHECK_MEMORY_ERROR(copy_from_user(req_node->response.data, obj->op_params.end_job.response.data, req_node->response_len));
