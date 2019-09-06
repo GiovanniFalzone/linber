@@ -1,13 +1,17 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -pedantic
+
+INCLUDE_DIR = -I../../libs/inc
+CFLAGS += $(INCLUDE_DIR)
+
 LDLIBS = -pthread
 
 TARGET = linber_monitor
 
-SRCS = ../../libs/linber_service_api.c
+SRCS = ../../libs/src/linber_service_api.c
 
-DEPS = ../../libs/linber_service_api.h
-DEPS += ../../libs/linber_ioctl.h
+DEPS = ../../libs/inc/linber_service_api.h
+DEPS += ../../libs/inc/linber_ioctl.h
 
 .PHONY:
 all: $(TARGET)

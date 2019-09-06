@@ -1,16 +1,27 @@
 CC = g++
 CCFLAGS = -std=c++11 -Wall -Wextra -pedantic -I.
+
+INCLUDE_DIR = -I../../libs/inc
+CCFLAGS += $(INCLUDE_DIR)
+
 LDLIBS = -lprotobuf -pthread
 
-TARGET = Calculator.pb Calculator_server Calculator_client
+TARGET = Calculator.pb server client
 
-SRCS = ../../libs/linber_service_api.c
+SRCS = 	../../libs/src/linber_service_api.c
+SRCS += ../../libs/src/linberServiceWorker.cpp
+SRCS += ../../libs/src/linberServiceClient.cpp
 SRCS += Calculator.pb.cc
+SRCS += Calculator_service_worker.cpp
+SRCS += Calculator_service_client.cpp
 
-DEPS = ../../libs/linber_service_api.h
-DEPS += ../../libs/linber_ioctl.h
-DEPS += ../../libs/linberServiceWorker.h
-DEPS += ../../libs/linberClient.h
+DEPS = 	../../libs/inc/linber_service_api.h
+DEPS += ../../libs/inc/linber_ioctl.h
+DEPS += ../../libs/inc/linberServiceClient.h
+DEPS += ../../libs/inc/linberServiceWorker.h
+DEPS += Calculator_service_client.h
+
+
 
 PROTO = Calculator.proto
 

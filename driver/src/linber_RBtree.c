@@ -1,29 +1,5 @@
-#ifndef LINBER_RBTREE
-#define LINBER_RBTREE
+#include "linber_RBtree.h"
 
-#include <linux/list.h>
-#include <linux/rbtree.h>
-#include "linber_types.h"
-
-//#define DEBUG_RBTREE
-
-struct RBtree_RequestNode {
-	struct rb_node node;			// used to manage the node inside the root ordered by deadline
-	struct list_head RequestHead;	// queue of request, more request can have the same deadline
-	unsigned long unique_id;
-};
-
-struct RBtree_ServiceNode {
-	struct rb_node node;			// used to manage the node inside the root ordered by uri string
-	struct ServiceNode *Service;
-	char *service_uri;
-};
-
-
-/*----------------------------------------------------------------
-	Extract the first list_node from the list if the list_head,
-	Excute with mutex locked to avoid a deletion while another is iterating
------------------------------------------------------------------*/
 static RequestNode *Dequeue_Request(struct list_head *head){
 	RequestNode *req_node = NULL;
 	if(list_empty(head)){
@@ -248,5 +224,3 @@ struct RequestNode* RBtree_get_request(struct rb_root *root, unsigned long abs_d
 	}
 	return NULL;
 }
-
-#endif

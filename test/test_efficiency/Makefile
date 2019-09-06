@@ -1,5 +1,9 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -pedantic
+
+INCLUDE_DIR = -I../../libs/inc
+CFLAGS += $(INCLUDE_DIR)
+
 LDLIBS = -pthread
 
 CLIENT_EFF_MEM = client_eff_mem
@@ -7,10 +11,10 @@ CLIENT_EFF_SHM = client_eff_shm
 
 TARGET = $(CLIENT_EFF_MEM) $(CLIENT_EFF_SHM)
 
-SRCS = ../../libs/linber_service_api.c
+SRCS = ../../libs/src/linber_service_api.c
 
-DEPS = ../../libs/linber_service_api.h
-DEPS += ../../libs/linber_ioctl.h
+DEPS = ../../libs/inc/linber_service_api.h
+DEPS += ../../libs/inc/linber_ioctl.h
 
 .PHONY:
 all: $(TARGET)

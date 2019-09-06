@@ -6,7 +6,7 @@
 #include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include "../../libs/linber_service_api.h"
+#include "linber_service_api.h"
 #include <time.h>
 
 #define DEFAULT_SERVICE_URI			"org.service\0"

@@ -24,8 +24,6 @@ function [mem_size, mem_exec_times, shm_exec_times] = import_data()
 	shm_size = shmefftest1Bto1GB(:, 1);
 	mem_exec_times = memefftest1Bto1MB(:, 2:size(memefftest1Bto1MB, 2));
 	shm_exec_times = shmefftest1Bto1GB(:, 2:size(shmefftest1Bto1GB, 2));
-	mem_exec_times = mem_exec_times / 1000;
-	shm_exec_times = shm_exec_times / 1000;
 
 	clear memefftest1Bto1MB
 	clear shmefftest1Bto1GB

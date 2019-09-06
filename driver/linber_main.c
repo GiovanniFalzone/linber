@@ -20,7 +20,7 @@
 #include <linux/random.h>
 #include <linux/sched.h>
 
-#include "../libs/linber_ioctl.h"
+#include "linber_ioctl.h"
 #include "linber_RBtree.h"
 #include "linber_types.h"
 

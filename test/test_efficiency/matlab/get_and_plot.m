@@ -1,8 +1,16 @@
-
 %% INIT parameters
-clc; clear all;
+clc;
+clear all;
 
 [mem_size, mem_exec_times, shm_exec_times] = import_data();
+mem_exec_times = mem_exec_times / 1000;
+shm_exec_times = shm_exec_times / 1000;
+
+figure;
+subplot(2, 1, 1);
+surf(mem_exec_times);
+subplot(2, 1, 2);
+surf(shm_exec_times);
 
 min_mem_exec_time = min(mem_exec_times');
 avg_mem_exec_time = mean(mem_exec_times');
@@ -26,8 +34,38 @@ for i = 1:31
 end
 clear i;
 
+%% Mem vs Shm
+figure('units','normalized','outerposition',[0 0 1 1]);
+hold on;
+grid on;
+title("Average execution time");
+xlabel("size");
+ylabel("Time in us");
+
+range = 1:17;
+y_step = 1;
+
+y_min = floor(min(min_mem_exec_time(range)));
+y_max = ceil(max(max_mem_exec_time(range)));
+
+xticks(range);
+xticklabels(size_labels(range))
+yticks(y_min:y_step:y_max);
+
+plot(avg_mem_exec_time(range));
+plot(avg_shm_exec_time(range));
+
+legend({'mem','shm'});
+
+filename = 'mem_vs_shm_' + string(size_labels(range(1))) + '_to_' + string(size_labels(range(size(range, 2))));
+saveas(gcf, '../plots/'+filename+'.png');
+
+
+%% Memory buffer
+dir_path = '../plots/mem/';
+
 %% MEM Full Min, Avg, Max
-figure;
+figure('units','normalized','outerposition',[0 0 1 1]);
 hold on;
 grid on;
 title("Execution time using buffers");
@@ -52,8 +90,12 @@ plot(max_mem_exec_time);
 legend({'min','average','max'});
 
 
+filename = 'min_avg_max_' + string(size_labels(range(1))) + '_to_' + string(size_labels(range(size(range, 2))));
+saveas(gcf, dir_path + filename+'.png');
+
+
 %% MEM 1 to 16KB Min, Avg
-figure;
+figure('units','normalized','outerposition',[0 0 1 1]);
 hold on;
 grid on;
 title("Execution time using buffers");
@@ -75,49 +117,62 @@ plot(avg_mem_exec_time(range));
 
 legend({'min','average'});
 
+filename = 'min_avg_' + string(size_labels(range(1))) + '_to_' + string(size_labels(range(size(range, 2))));
+saveas(gcf, dir_path + filename+'.png');
+
 %% MEM all case all iteration
-figure;
+figure('units','normalized','outerposition',[0 0 1 1]);
 hold on;
 grid on;
 
 title("Execution time using buffers");
 xlabel("Iteration #");
 ylabel("Time in us (log scale)");
-
+set(gca, 'YScale', 'log');
 range = 1:size(mem_exec_times, 1);
 
 for i = range
 	plot(mem_exec_times(i, :));
 end
-
-set(gca, 'YScale', 'log');
 legend(size_labels(range));
+
+filename = 'exec_time_' + string(size_labels(range(1))) + '_to_' + string(size_labels(range(size(range, 2))));
+saveas(gcf, dir_path + filename+'.png');
 
 
 %% MEM 32KB strange case
-figure;
+figure('units','normalized','outerposition',[0 0 1 1]);
 hold on;
 grid on;
 
 title("Execution time using buffers");
 xlabel("Iteration #");
-ylabel("Time in us (log scale)");
+ylabel("Time in us");
 
 i = 16;
 range = i;
 
 plot(mem_exec_times(i, :));
 
-set(gca, 'YScale', 'log');
+y_step = 2;
+y_max = max_mem_exec_time(i);
+y_min = min_mem_exec_time(i);
+ylim([y_min y_max]);
+yticks(floor(y_min):y_step:ceil(y_max));
+
 legend(size_labels(range));
+
+filename = 'exec_time_' + string(size_labels(range(1))) + '_to_' + string(size_labels(range(size(range, 2))));
+saveas(gcf, dir_path + filename+'.png');
 
 
 %% MEM Histograms
-figure;
+figure('units','normalized','outerposition',[0 0 1 1]);
 hold on;
+grid on;
 title("Execution time using buffers");
-xlabel("Iteration #");
-ylabel("Distribution");
+xlabel("Time in us");
+ylabel("Probability");
 
 x_max = 0;
 x_min = 10000;
@@ -136,13 +191,17 @@ x_max = 30;
 xlim([x_min x_max]);
 xticks(floor(x_min):x_step:ceil(x_max));
 
+filename = 'hist_' + string(size_labels(range(1))) + '_to_' + string(size_labels(range(size(range, 2))));
+saveas(gcf, dir_path + filename+'.png');
+
 
 %% MEM Histograms
-figure;
+figure('units','normalized','outerposition',[0 0 1 1]);
 hold on;
+grid on;
 title("Execution time using buffers");
-xlabel("Iteration #");
-ylabel("Distribution");
+xlabel("Time in us");
+ylabel("Probability");
 
 x_max = 0;
 x_min = 10000;
@@ -160,12 +219,16 @@ legend(size_labels(range));
 xlim([x_min x_max]);
 xticks(floor(x_min):x_step:ceil(x_max));
 
+filename = 'hist_' + string(size_labels(range(1))) + '_to_' + string(size_labels(range(size(range, 2))));
+saveas(gcf, dir_path + filename+'.png');
+
 %% MEM Histograms
-figure;
+figure('units','normalized','outerposition',[0 0 1 1]);
 hold on;
+grid on;
 title("Execution time using buffers");
-xlabel("Iteration #");
-ylabel("Distribution");
+xlabel("Time in us");
+ylabel("Probability");
 
 x_max = 0;
 x_min = 10000;
@@ -183,12 +246,19 @@ legend(size_labels(range));
 xlim([x_min x_max]);
 xticks(floor(x_min):x_step:ceil(x_max));
 
+filename = 'hist_' + string(size_labels(range(1))) + '_to_' + string(size_labels(range(size(range, 2))));
+saveas(gcf, dir_path + filename+'.png');
+
+
 %% MEM Histograms full
-figure;
+figure('units','normalized','outerposition',[0 0 1 1]);
 hold on;
+grid on;
 title("Execution time using buffers");
-xlabel("Iteration #");
-ylabel("Distribution");
+xlabel("Time in us (log scale)");
+xtickangle(90);
+set(gca, 'XScale', 'log');
+ylabel("Probability");
 
 x_max = 0;
 x_min = 10000;
@@ -205,10 +275,16 @@ end
 legend(size_labels(range));
 xlim([x_min x_max]);
 xticks(floor(x_min):x_step:ceil(x_max));
-set(gca, 'XScale', 'log');
+
+filename = 'hist_' + string(size_labels(range(1))) + '_to_' + string(size_labels(range(size(range, 2))));
+saveas(gcf, dir_path + filename+'.png');
+
+
+%% Shared memory
+dir_path = '../plots/shm/';
 
 %% plot shared mem min, avg, max
-figure;
+figure('units','normalized','outerposition',[0 0 1 1]);
 hold on;
 grid on;
 title("Execution time using shared memory");
@@ -232,8 +308,12 @@ plot(max_shm_exec_time);
 
 legend({'min','average','max'});
 
+filename = 'min_avg_max_' + string(size_labels(range(1))) + '_to_' + string(size_labels(range(size(range, 2))));
+saveas(gcf, dir_path + filename+'.png');
+
+
 %% plot shared mem min, avg
-figure;
+figure('units','normalized','outerposition',[0 0 1 1]);
 hold on;
 grid on;
 title("Execution time using shared memory");
@@ -256,34 +336,48 @@ plot(avg_shm_exec_time);
 
 legend({'min','average'});
 
+filename = 'min_avg_' + string(size_labels(range(1))) + '_to_' + string(size_labels(range(size(range, 2))));
+saveas(gcf, dir_path + filename+'.png');
+
 
 %% SHM all case all iteration
-figure;
+figure('units','normalized','outerposition',[0 0 1 1]);
 hold on;
 grid on;
 
 title("Execution time using shared memory");
 xlabel("Iteration #");
-ylabel("Time in us (log scale)");
+ylabel("Time in us");
 
+y_max = 0;
+y_min = 10000;
+y_step = 20;
 range = 1:size(shm_exec_times, 1);
 
 for i = range
+	y_max = max_shm_exec_time(i);
+	y_min = min_shm_exec_time(i);
 	plot(shm_exec_times(i, :));
 end
 
 legend(size_labels(range));
 
+ylim([y_min y_max]);
+yticks(floor(y_min):y_step:ceil(y_max));
+
+
+filename = 'exec_time_' + string(size_labels(range(1))) + '_to_' + string(size_labels(range(size(range, 2))));
+saveas(gcf, dir_path + filename+'.png');
 
 
 
 %% SHM Histogram
-figure;
+figure('units','normalized','outerposition',[0 0 1 1]);
 hold on;
 grid on;
 title("Execution time using buffers");
-xlabel("Iteration #");
-ylabel("Distribution");
+xlabel("Time in us");
+ylabel("Probability");
 
 x_max = 0;
 x_min = 10000;
@@ -301,4 +395,8 @@ legend(size_labels(range));
 xlim([x_min 100]);
 xticks(floor(x_min):x_step:ceil(x_max));
 
+filename = 'hist_' + string(size_labels(range(1))) + '_to_' + string(size_labels(range(size(range, 2))));
+saveas(gcf, dir_path + filename+'.png');
 
+%% end
+close all;

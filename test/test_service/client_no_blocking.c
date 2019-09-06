@@ -9,7 +9,7 @@
 #include <string.h>
 #include <sys/time.h>
 #include <signal.h>
-#include "../../libs/linber_service_api.h"
+#include "linber_service_api.h"
 
 #define DEFAULT_MESSAGE "Hello World\0"
 

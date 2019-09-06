@@ -18,7 +18,7 @@
 #include <sys/time.h>
 #include <signal.h>
 
-#include "../../libs/linber_service_api.h"
+#include "linber_service_api.h"
 
 #define DEFAULT_SERVICE_URI					"org.service\0"
 #define DEFAULT_JOB_EXEC_TIME				5	//ms

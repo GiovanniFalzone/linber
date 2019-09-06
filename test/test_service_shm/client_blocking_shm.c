@@ -8,7 +8,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <string.h>
-#include "../../libs/linber_service_api.h"
+#include "linber_service_api.h"
 #include <sys/time.h>
 #include <signal.h>
 

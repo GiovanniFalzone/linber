@@ -2,6 +2,7 @@ TARGET = linber_monitor
 TARGET += test_service
 TARGET += test_service_shm
 TARGET += Calculator
+TARGET += test_efficiency
 
 .PHONY:
 all: $(TARGET)
