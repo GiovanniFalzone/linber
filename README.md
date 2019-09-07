@@ -1,6 +1,6 @@
 # Linber description
 Linber is a RPC mechanism implemented as driver module in the linux kernel.
-Linber API uses IOCTL to comunicate with the Linber module through the file /dev/linber \
+Linber API uses IOCTL to comunicate with the Linber module through the file /dev/linber
 
 for more deatails on the implementations take a look at linber.pdf.
 
@@ -10,7 +10,7 @@ Distro: Ubuntu 7.4.0-1ubuntu1~18.04.1	\
 Kernel version: 5.0.0-23-generic		\
 gcc version 7.4.0
 
-The module uses 0x20 as magic number and [0-10] as sequence number to register the IOCTL operations. (https://elixir.bootlin.com/linux/latest/source/Documentation/ioctl/ioctl-number.txt)
+The module uses 0xFF as identifier and [0-10] as sequence number to register the IOCTL operations. (https://elixir.bootlin.com/linux/latest/source/Documentation/ioctl/ioctl-number.txt)
 
 ### Dependencies
 	sudo apt-get install build-essential make libprotobuf-dev protobuf-compiler
@@ -23,8 +23,9 @@ The module uses 0x20 as magic number and [0-10] as sequence number to register t
 	make updatemod					// remove, build and reload the module
 
 ## Root permissions
-In order to set SCHED_DEADLINE as scheduler when required the server must run as root and also the client when server is using the shared memory otherwise the client will not be able to execute shmctl on the share memory created by the server because hasn't the rights to do that.
-This is a temporary condition, the test's Makefile will set the SUID bit of the binary files.
+In order to set SCHED_DEADLINE as scheduler when required the server must run as root.
+Also the the client need to execut as root when the server is using the shared memory otherwise the it will not be able to execute shmctl on the share memory created by the server and the shared memory it is not removed from the system.
+This is a temporary condition, the test's Makefile will compile the client and the server as root and then set the SUID bit for the binary files.
 
 ## module test using kernel memory to transfer the payload
 	//------- service with 1 worker, 5 ms execution time, 100 ms of period and 2 request per period (P=100, Q=2*exec_time) used for SCHED_DEADLINE
