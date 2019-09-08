@@ -1,4 +1,5 @@
 MODULE_MAME = linber
+CFLAGS  := -O2
 
 SRCS = $(MODULE_MAME)_main.c src/linber_RBtree.c
 OBJS = $(SRCS:.c=.o)
