@@ -140,32 +140,6 @@ filename = 'exec_time_' + string(size_labels(range(1))) + '_to_' + string(size_l
 saveas(gcf, dir_path + filename+'.png');
 
 
-%% MEM 32KB strange case
-figure('units','normalized','outerposition',[0 0 1 1]);
-hold on;
-grid on;
-
-title("Execution time using buffers");
-xlabel("Iteration #");
-ylabel("Time in us");
-
-i = 16;
-range = i;
-
-plot(mem_exec_times(i, :));
-
-y_step = 2;
-y_max = max_mem_exec_time(i);
-y_min = min_mem_exec_time(i);
-ylim([y_min y_max]);
-yticks(floor(y_min):y_step:ceil(y_max));
-
-legend(size_labels(range));
-
-filename = 'exec_time_' + string(size_labels(range(1))) + '_to_' + string(size_labels(range(size(range, 2))));
-saveas(gcf, dir_path + filename+'.png');
-
-
 %% MEM Histograms
 figure('units','normalized','outerposition',[0 0 1 1]);
 hold on;
