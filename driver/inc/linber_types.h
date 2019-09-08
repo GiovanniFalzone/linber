@@ -30,6 +30,7 @@ struct sched_attr {
 typedef struct RequestNode{
 	struct list_head list;				// used to implement the list, Completed queue
 	struct semaphore Request_sem;		// used to stop the client waiting for the response
+	struct task_struct *client;			// client task
 	unsigned long token;				// used to identify the single request when the client use a non blocking tecnique
 	unsigned long abs_deadline_ns;		// absolute deadline resect to boot time
 	int result_cmd;						// used to mark the request as completed or failed

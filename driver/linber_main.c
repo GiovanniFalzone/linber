@@ -152,6 +152,7 @@ static RequestNode* enqueue_request_for_service(	ServiceNode *ser_node, 			\
 	RequestNode *req_node;
 	req_node = create_Request();
 	if(req_node != NULL){
+		req_node->client = current;
 		req_node->token = ser_node->next_req_token++;
 		req_node->abs_deadline_ns = abs_deadline_ns;
 		if(shm_mode){
@@ -559,6 +560,9 @@ static int linber_request_service(linber_service_struct *obj){
 			CHECK_MEMORY_ERROR(get_user(token, obj->op_params.request.ptr_token));
 			req_node = find_Waiting_or_Completed_Request(ser_node, abs_deadline_ns, token);
 			if(req_node == NULL){
+				return LINBER_REQUEST_FAILED;
+			}
+			if(req_node->client != current){
 				return LINBER_REQUEST_FAILED;
 			}
 			down_interruptible(&req_node->Request_sem);
