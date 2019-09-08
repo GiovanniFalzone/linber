@@ -1,5 +1,9 @@
 # Linber description
-Linber is a RPC mechanism implemented as driver module in the linux kernel.
+Linber is a IPC/RPC mechanism implemented as driver module in the linux kernel, it allow a Server to register its service and a client to send a request to one of the registered services, the request will be served by one of the Service's workers waiting for the requests.
+
+The request can express a relative deadline that will be used to apply a Real Time policy to serve the request.
+A relative deadline equal to 0 means that a best effort policy will be used to serve the request.
+
 Linber API uses IOCTL to comunicate with the Linber module through the file /dev/linber
 
 for more deatails on the implementations take a look at linber.pdf.
