@@ -23,9 +23,7 @@ The module uses 0xFF as identifier and [0-10] as sequence number to register the
 	make updatemod					// remove, build and reload the module
 
 ## Root permissions
-In order to set SCHED_DEADLINE as scheduler when required the server must run as root.
-Also the the client need to execut as root when the server is using the shared memory otherwise the it will not be able to execute shmctl on the share memory created by the server and the shared memory it is not removed from the system.
-This is a temporary condition, the test's Makefile will compile the client and the server as root and then set the SUID bit for the binary files.
+In order to set SCHED_DEADLINE the server must run as root.
 
 ## module test using kernel memory to transfer the payload
 	//------- service with 1 worker, 5 ms execution time, 100 ms of period and 2 request per period (P=100, Q=2*exec_time) used for SCHED_DEADLINE
