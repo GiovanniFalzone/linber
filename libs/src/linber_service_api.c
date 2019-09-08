@@ -156,22 +156,16 @@ void linber_destroy_worker(char *file_str){
 	Create a shared memory, return the address and id of the shared memory
 ---------------------------------------------------------------------------------------------*/
 inline char *create_shm_from_key(key_t key, int len, int *id){
-//	struct shmid_ds shmid_ds;
+	struct shmid_ds shmid_ds;
 	char* shm;
 	if((*id = shmget(key, len, IPC_CREAT | 0666)) >= 0) {
 /*
-	I can set the permission to the user that will use the shared memory.
-	Passing the uid and gid of the Destination user
-	Service's workers are running as root so no problem
-	Users instead must pass the uid and gid using the request
-	or I have to change them inside the kernel
-	Another way could be that every service create a group for the service and
-	each Client user and root must be part of the group
+change permissions to the destination user, for now i set this that is the default first user
 */
-//		shmid_ds.shm_perm.uid
-//		shmid_ds.shm_perm.gid
-//		shmid_ds.shm_perm.mode = 0660;
-//		shmctl(*id, IPC_SET, &shmid_ds);
+		shmid_ds.shm_perm.uid = 1000;
+		shmid_ds.shm_perm.gid = 1000;
+		shmid_ds.shm_perm.mode = 0660;
+		shmctl(*id, IPC_SET, &shmid_ds);
 } else {
 		perror("shmget error\n");
 		return NULL;

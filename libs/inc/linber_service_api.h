@@ -20,7 +20,7 @@
 
 //----------------------
 //#define DEBUG
-//#define DEBUG_MESSAGE
+#define DEBUG_MESSAGE
 //----------------------
 
 

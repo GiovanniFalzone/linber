@@ -20,18 +20,15 @@ DEPS += ../../libs/inc/linber_ioctl.h
 all: $(TARGET)
 
 %: %.c $(DEPS) $(SRCS)
-	sudo $(CC) -o $@ $< $(SRCS) $(CFLAGS) $(LDLIBS)
-	sudo chmod u+s $@
+	$(CC) -o $@ $< $(SRCS) $(CFLAGS) $(LDLIBS)
 
 .PHONY:
 execute_test_mem:
 	sudo nice -n -20 ./$(CLIENT_EFF_MEM)
-	sudo chmod 666 *.csv
 
 .PHONY:
 execute_test_shm:
 	sudo nice -n -20 ./$(CLIENT_EFF_SHM)
-	sudo chmod 666 *.csv
 
 .PHONY:
 clean:
