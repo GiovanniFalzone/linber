@@ -139,6 +139,26 @@ legend(size_labels(range));
 filename = 'exec_time_' + string(size_labels(range(1))) + '_to_' + string(size_labels(range(size(range, 2))));
 saveas(gcf, dir_path + filename+'.png');
 
+%% MEM single Histograms
+my_dir_path = dir_path + "hist/";
+
+range = 1:size(mem_exec_times, 1);
+
+for i=range
+	figure('units','normalized','outerposition',[0 0 1 1]);
+	grid on;
+
+	histogram(mem_exec_times(i,:), 100,'Normalization','probability');
+
+	title("Execution time using buffers");
+	xlabel("Time in us");
+	ylabel("Probability");
+	
+	legend(size_labels(i));
+	filename = 'hist_' + string(size_labels(range(i)));
+	saveas(gcf, my_dir_path + filename+'.png');
+end
+
 
 %% MEM Histograms
 figure('units','normalized','outerposition',[0 0 1 1]);
@@ -343,6 +363,25 @@ yticks(floor(y_min):y_step:ceil(y_max));
 filename = 'exec_time_' + string(size_labels(range(1))) + '_to_' + string(size_labels(range(size(range, 2))));
 saveas(gcf, dir_path + filename+'.png');
 
+%% SHM single Histograms
+my_dir_path = dir_path + "hist/";
+
+range = 1:size(shm_exec_times, 1);
+
+for i=range
+	figure('units','normalized','outerposition',[0 0 1 1]);
+	grid on;
+
+	histogram(shm_exec_times(i,:), 100,'Normalization','probability');
+
+	title("Execution time using buffers");
+	xlabel("Time in us");
+	ylabel("Probability");
+	
+	legend(size_labels(i));
+	filename = 'hist_' + string(size_labels(range(i)));
+	saveas(gcf, my_dir_path + filename+'.png');
+end
 
 
 %% SHM Histogram
